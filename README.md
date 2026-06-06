@@ -1,6 +1,6 @@
 # Bedrock Protocol C++
 
-`bedrock-protocol-cpp` is a C++20
+`bedrock-protocol-cpp` created on C++20
 
 It is built for bot projects: you write normal C++ code, put connection settings in `bedrock::createClient({...})`, build your bot, and run your bot executable without passing host/version/user arguments in the terminal.
 

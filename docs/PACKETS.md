@@ -41,7 +41,7 @@ auto client = bedrock::createClient({
 
 `decodePackets = true` is useful for debugging, but it is slower on very large packets such as `crafting_data`.
 
-For bot-side examples that read packet fields, change a local packet copy, and prepare outgoing packet data, see [Bot Packet Examples](BOT_PACKETS.md).
+For bot-side examples that read packet fields, change a local packet copy, and send schema-shaped outgoing packets, see [Bot Packet Examples](BOT_PACKETS.md).
 
 ## Common Login Flow Packets
 

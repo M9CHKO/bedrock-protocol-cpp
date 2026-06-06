@@ -4,12 +4,14 @@
 #include <bedrock/protodef/ProtoDefWriter.hpp>
 #include <bedrock/generated/GeneratedProtocolTypes.hpp>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace bedrock {
@@ -60,6 +62,11 @@ public:
             return;
         }
 
+        if (startsWith(type, "[\"pstring\"")) {
+            encodePString(type, value, writer);
+            return;
+        }
+
         if (startsWith(type, "[\"buffer\"")) {
             encodeBuffer(type, value, writer);
             return;
@@ -67,6 +74,11 @@ public:
 
         if (startsWith(type, "[\"encapsulated\"")) {
             encodeEncapsulated(type, value, writer);
+            return;
+        }
+
+        if (startsWith(type, "[\"bitflags\"")) {
+            encodeBitflags(type, value, writer);
             return;
         }
 
@@ -126,6 +138,20 @@ private:
         writer.bytes(
             value.bytesValue.data(),
             value.bytesValue.size()
+        );
+    }
+
+    void encodePString(
+        const std::string& stringJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        const std::string& text = asString(value);
+        auto countType = readJsonStringField(stringJson, "countType").value_or("varint");
+        writeCount(countType, text.size(), writer);
+        writer.bytes(
+            reinterpret_cast<const uint8_t*>(text.data()),
+            text.size()
         );
     }
 
@@ -202,6 +228,21 @@ private:
             return;
         }
 
+        if (countType == "zigzag32") {
+            writer.zigzag32(static_cast<int32_t>(count));
+            return;
+        }
+
+        if (countType == "zigzag64") {
+            writer.zigzag64(static_cast<int64_t>(count));
+            return;
+        }
+
+        if (countType == "varint64" || countType == "varuint64") {
+            writer.varuint64(static_cast<uint64_t>(count));
+            return;
+        }
+
         throw std::runtime_error("array encode unsupported countType: " + countType);
     }
 
@@ -226,12 +267,12 @@ private:
                 throw std::runtime_error("switch encode compareTo not found");
             }
 
-            const ProtoDefValue* compareField = value.get(*compareTo);
-            if (!compareField) {
+            auto resolvedCompare = resolveCompareValue(value, *compareTo);
+            if (!resolvedCompare.has_value()) {
                 throw std::runtime_error("switch encode missing compare field: " + *compareTo);
             }
 
-            compareValue = valueToSwitchKey(*compareField);
+            compareValue = *resolvedCompare;
         }
 
         auto branch = findSwitchBranchType(switchJson, compareValue);
@@ -240,7 +281,7 @@ private:
         }
 
         if (!branch.has_value()) {
-            throw std::runtime_error("switch encode no branch for: " + compareValue);
+            return;
         }
 
         if (const ProtoDefValue* directValue = value.get("$value")) {
@@ -325,7 +366,7 @@ private:
                     ProtoDefValue switchContext = value;
 
                     if (const ProtoDefValue* child = value.get(*name)) {
-                        switchContext.objectValue["$value"] = *child;
+                        switchContext.objectValue["$value"] = withParent(*child, value);
                     }
 
                     encode(*type, switchContext, writer);
@@ -335,7 +376,7 @@ private:
                         throw std::runtime_error("container missing field: " + *name);
                     }
 
-                    encode(*type, *child, writer);
+                    encode(*type, withParent(*child, value), writer);
                 }
             }
 
@@ -362,6 +403,40 @@ private:
             return;
         }
 
+        if (typeName == "uuid") {
+            writeUuid(asString(value), writer);
+            return;
+        }
+
+        if (typeName == "restBuffer" || typeName == "MapInfo") {
+            if (value.kind != ProtoDefValue::Kind::Bytes) {
+                throw std::runtime_error(typeName + " encode expects bytes");
+            }
+            writer.bytes(value.bytesValue);
+            return;
+        }
+
+        if (typeName == "byterot") {
+            const double rotation = asDouble(value);
+            writer.u8(static_cast<uint8_t>(rotation / (360.0 / 256.0)));
+            return;
+        }
+
+        if (typeName == "nbtLoop") {
+            if (value.kind != ProtoDefValue::Kind::Array) {
+                throw std::runtime_error("nbtLoop encode expects array");
+            }
+            for (const auto& item : value.arrayValue) {
+                encodeNativeNbt(item, writer, true);
+            }
+            writer.u8(0);
+            return;
+        }
+
+        if (typeName == "enum_size_based_on_values_len") {
+            return;
+        }
+
         if (typeName == "native" || typeName == "nbt") {
             encodeNativeNbt(value, writer, true);
             return;
@@ -382,6 +457,11 @@ private:
             return;
         }
 
+        if (typeName == "i8" || typeName == "byte") {
+            writer.u8(static_cast<uint8_t>(asInt(value)));
+            return;
+        }
+
         if (typeName == "u16" || typeName == "lu16" || typeName == "li16") {
             writer.u16le(static_cast<uint16_t>(asUInt(value)));
             return;
@@ -397,8 +477,18 @@ private:
             return;
         }
 
+        if (typeName == "u64") {
+            writer.u64le(static_cast<uint64_t>(asUInt(value)));
+            return;
+        }
+
         if (typeName == "i32" || typeName == "li32") {
             writer.u32le(static_cast<uint32_t>(asInt(value)));
+            return;
+        }
+
+        if (typeName == "i64") {
+            writer.u64le(static_cast<uint64_t>(asInt(value)));
             return;
         }
 
@@ -409,6 +499,18 @@ private:
 
         if (typeName == "varint" || typeName == "varuint") {
             writer.varuint32(static_cast<uint32_t>(asUInt(value)));
+            return;
+        }
+
+        if (
+            typeName == "varuint64" ||
+            typeName == "varint64" ||
+            typeName == "varlong" ||
+            typeName == "entity_runtime_id" ||
+            typeName == "actor_runtime_id" ||
+            typeName == "runtime_entity_id"
+        ) {
+            writer.varuint64(asUInt(value));
             return;
         }
 
@@ -672,6 +774,7 @@ private:
         if (v.kind == ProtoDefValue::Kind::Bool) return v.boolValue;
         if (v.kind == ProtoDefValue::Kind::Int) return v.intValue != 0;
         if (v.kind == ProtoDefValue::Kind::UInt) return v.uintValue != 0;
+        if (v.kind == ProtoDefValue::Kind::Double) return v.doubleValue != 0.0;
         throw std::runtime_error("expected bool-compatible value");
     }
 
@@ -679,6 +782,7 @@ private:
         if (v.kind == ProtoDefValue::Kind::Int) return v.intValue;
         if (v.kind == ProtoDefValue::Kind::UInt) return static_cast<int64_t>(v.uintValue);
         if (v.kind == ProtoDefValue::Kind::Bool) return v.boolValue ? 1 : 0;
+        if (v.kind == ProtoDefValue::Kind::Double) return static_cast<int64_t>(v.doubleValue);
         throw std::runtime_error("expected int-compatible value");
     }
 
@@ -686,10 +790,12 @@ private:
         if (v.kind == ProtoDefValue::Kind::UInt) return v.uintValue;
         if (v.kind == ProtoDefValue::Kind::Int) return static_cast<uint64_t>(v.intValue);
         if (v.kind == ProtoDefValue::Kind::Bool) return v.boolValue ? 1 : 0;
+        if (v.kind == ProtoDefValue::Kind::Double) return static_cast<uint64_t>(v.doubleValue);
         throw std::runtime_error("expected uint-compatible value");
     }
 
     static double asDouble(const ProtoDefValue& v) {
+        if (v.kind == ProtoDefValue::Kind::Double) return v.doubleValue;
         if (v.kind == ProtoDefValue::Kind::Int) return static_cast<double>(v.intValue);
         if (v.kind == ProtoDefValue::Kind::UInt) return static_cast<double>(v.uintValue);
         if (v.kind == ProtoDefValue::Kind::Bool) return v.boolValue ? 1.0 : 0.0;
@@ -721,6 +827,208 @@ private:
         }
 
         throw std::runtime_error("switch compare value unsupported kind");
+    }
+
+    static void writeUuid(const std::string& value, ProtoDefWriter& writer) {
+        auto hexValue = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+            if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+            return -1;
+        };
+
+        std::string hex;
+        hex.reserve(32);
+        for (char c : value) {
+            if (c == '-') continue;
+            hex.push_back(c);
+        }
+
+        if (hex.size() != 32) {
+            throw std::runtime_error("uuid encode expects 32 hex digits");
+        }
+
+        for (std::size_t i = 0; i < hex.size(); i += 2) {
+            int hi = hexValue(hex[i]);
+            int lo = hexValue(hex[i + 1]);
+            if (hi < 0 || lo < 0) {
+                throw std::runtime_error("uuid encode invalid hex");
+            }
+            writer.u8(static_cast<uint8_t>((hi << 4) | lo));
+        }
+    }
+
+    void encodeBitflags(
+        const std::string& bitflagsJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        auto baseType = readJsonStringField(bitflagsJson, "type").value_or("varint");
+
+        uint64_t mask = 0;
+        if (value.kind == ProtoDefValue::Kind::Object) {
+            if (const ProtoDefValue* raw = value.get("_value")) {
+                mask = asUInt(*raw);
+            }
+        }
+
+        if (
+            value.kind == ProtoDefValue::Kind::UInt ||
+            value.kind == ProtoDefValue::Kind::Int ||
+            value.kind == ProtoDefValue::Kind::Bool ||
+            value.kind == ProtoDefValue::Kind::Double
+        ) {
+            mask = asUInt(value);
+        } else if (value.kind == ProtoDefValue::Kind::Array) {
+            auto flags = readBitflagValues(bitflagsJson);
+            for (const auto& item : value.arrayValue) {
+                const std::string& name = asString(item);
+                auto it = flags.find(name);
+                if (it == flags.end()) {
+                    throw std::runtime_error("unknown bitflag: " + name);
+                }
+                mask |= it->second;
+            }
+        } else if (value.kind == ProtoDefValue::Kind::Object) {
+            auto flags = readBitflagValues(bitflagsJson);
+            for (const auto& [name, enabled] : value.objectValue) {
+                if (name == "_value") continue;
+                if (!asBool(enabled)) continue;
+                auto it = flags.find(name);
+                if (it == flags.end()) {
+                    throw std::runtime_error("unknown bitflag: " + name);
+                }
+                mask |= it->second;
+            }
+        } else {
+            throw std::runtime_error("bitflags encode expects number, array, or object");
+        }
+
+        encodeTypeName(baseType, ProtoDefValue::uinteger(mask), writer);
+    }
+
+    static std::unordered_map<std::string, uint64_t> readBitflagValues(const std::string& bitflagsJson) {
+        std::unordered_map<std::string, uint64_t> out;
+        auto flagsValue = readJsonValueField(bitflagsJson, "flags");
+        if (!flagsValue.has_value()) return out;
+
+        const std::string flags = trim(*flagsValue);
+        if (flags.empty()) return out;
+
+        if (flags[0] == '[') {
+            std::size_t pos = 0;
+            uint64_t bit = 1;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                out[flags.substr(q1 + 1, q2 - q1 - 1)] = bit;
+                bit <<= 1;
+                pos = q2 + 1;
+            }
+            return out;
+        }
+
+        if (flags[0] == '{') {
+            std::size_t pos = 0;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                std::string name = flags.substr(q1 + 1, q2 - q1 - 1);
+
+                auto colon = flags.find(':', q2 + 1);
+                if (colon == std::string::npos) break;
+                std::size_t n = colon + 1;
+                while (n < flags.size() && std::isspace(static_cast<unsigned char>(flags[n]))) ++n;
+                std::size_t e = n;
+                while (e < flags.size() && std::isdigit(static_cast<unsigned char>(flags[e]))) ++e;
+                out[name] = static_cast<uint64_t>(std::stoull(flags.substr(n, e - n)));
+                pos = e;
+            }
+        }
+
+        return out;
+    }
+
+    static ProtoDefValue withParent(const ProtoDefValue& value, const ProtoDefValue& parent) {
+        if (value.kind == ProtoDefValue::Kind::Object) {
+            ProtoDefValue copy = value;
+            copy.objectValue[".."] = parent;
+            return copy;
+        }
+
+        if (value.kind == ProtoDefValue::Kind::Array) {
+            ProtoDefValue copy = value;
+            for (auto& item : copy.arrayValue) {
+                item = withParent(item, parent);
+            }
+            return copy;
+        }
+
+        return value;
+    }
+
+    static std::optional<std::string> resolveCompareValue(
+        const ProtoDefValue& object,
+        const std::string& expression
+    ) {
+        auto orPos = expression.find("||");
+        if (orPos != std::string::npos) {
+            std::size_t start = 0;
+            while (start < expression.size()) {
+                auto next = expression.find("||", start);
+                std::string part = trim(expression.substr(
+                    start,
+                    next == std::string::npos ? std::string::npos : next - start
+                ));
+
+                if (const ProtoDefValue* value = getPath(object, part)) {
+                    if (asBool(*value)) {
+                        return std::string("true");
+                    }
+                }
+
+                if (next == std::string::npos) break;
+                start = next + 2;
+            }
+            return std::string("false");
+        }
+
+        const ProtoDefValue* value = getPath(object, expression);
+        if (!value) return std::nullopt;
+        return valueToSwitchKey(*value);
+    }
+
+    static const ProtoDefValue* getPath(const ProtoDefValue& object, const std::string& path) {
+        const ProtoDefValue* current = &object;
+        std::string normalized = path;
+        std::replace(normalized.begin(), normalized.end(), '.', '/');
+
+        std::size_t start = 0;
+        if (!normalized.empty() && normalized[0] == '/') {
+            while (current && current->get("..")) {
+                current = current->get("..");
+            }
+            start = 1;
+        }
+
+        while (current && start <= normalized.size()) {
+            auto slash = normalized.find('/', start);
+            std::string part = slash == std::string::npos
+                ? normalized.substr(start)
+                : normalized.substr(start, slash - start);
+
+            if (!part.empty()) {
+                current = current->get(part);
+            }
+
+            if (slash == std::string::npos) return current;
+            start = slash + 1;
+        }
+        return current;
     }
 
     static std::optional<std::string> findSwitchBranchType(

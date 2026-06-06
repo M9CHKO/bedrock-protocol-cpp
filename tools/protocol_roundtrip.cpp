@@ -1,11 +1,14 @@
 #include <bedrock/BedrockFramer.hpp>
 #include <bedrock/protocol/ProtocolDefinition.hpp>
 #include <bedrock/protocol/VersionedPacketCodec.hpp>
+#include <bedrock/protodef/ProtoDefPacketEncoder.hpp>
+#include <bedrock/protodef/ProtoDefValue.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -30,6 +33,10 @@ std::vector<int> parseVersion(const std::string& version) {
 
 bool versionAtLeast(const std::string& version, const std::string& minimum) {
     return parseVersion(version) >= parseVersion(minimum);
+}
+
+bool versionEquals(const std::string& version, const std::string& other) {
+    return parseVersion(version) == parseVersion(other);
 }
 
 bool sameBytes(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
@@ -102,6 +109,106 @@ bool checkBatchRoundtrip(const std::string& version, bool compressionReady) {
     return true;
 }
 
+bedrock::ProtoDefValue object(std::unordered_map<std::string, bedrock::ProtoDefValue> fields) {
+    return bedrock::ProtoDefValue::object(std::move(fields));
+}
+
+bedrock::ProtoDefValue array(std::vector<bedrock::ProtoDefValue> values = {}) {
+    return bedrock::ProtoDefValue::array(std::move(values));
+}
+
+bool checkSchemaEncode(
+    const std::string& version,
+    const std::string& packetName,
+    const bedrock::ProtoDefValue& value
+) {
+    auto codec = bedrock::VersionedPacketCodec::forVersion(version);
+    if (!codec.definition().hasPacket(packetName)) {
+        return true;
+    }
+
+    try {
+        bedrock::ProtoDefPacketEncoder encoder(version);
+        auto payload = encoder.encodePacket(packetName, value);
+        auto full = codec.encodeFullPacketByName(packetName, payload);
+        auto decoded = codec.decodeFullPacket(full);
+
+        if (decoded.name != packetName || decoded.payload != payload) {
+            std::cerr << "[FAIL] " << version << " schema encode " << packetName << " mismatch\n";
+            return false;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[FAIL] " << version << " schema encode " << packetName << ": " << e.what() << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool checkSchemaEncodes(const std::string& version) {
+    bool ok = true;
+
+    ok = checkSchemaEncode(version, "request_chunk_radius", object({
+        {"chunk_radius", bedrock::ProtoDefValue::integer(20)},
+        {"max_radius", bedrock::ProtoDefValue::uinteger(0)}
+    })) && ok;
+
+    ok = checkSchemaEncode(version, "client_cache_status", object({
+        {"enabled", bedrock::ProtoDefValue::boolean(false)}
+    })) && ok;
+
+    ok = checkSchemaEncode(version, "set_local_player_as_initialized", object({
+        {"runtime_entity_id", bedrock::ProtoDefValue::uinteger(UINT64_MAX)}
+    })) && ok;
+
+    ok = checkSchemaEncode(version, "resource_pack_client_response", object({
+        {"response_status", bedrock::ProtoDefValue::string("completed")},
+        {"resourcepackids", array()}
+    })) && ok;
+
+    auto textPacket = object({
+        {"type", bedrock::ProtoDefValue::string("raw")},
+        {"needs_translation", bedrock::ProtoDefValue::boolean(false)},
+        {"message", bedrock::ProtoDefValue::string("hello from schema encoder")},
+        {"xuid", bedrock::ProtoDefValue::string("")},
+        {"platform_chat_id", bedrock::ProtoDefValue::string("")},
+        {"filtered_message", bedrock::ProtoDefValue::string("")}
+    });
+    if (versionAtLeast(version, "1.21.130")) {
+        textPacket.objectValue["category"] = bedrock::ProtoDefValue::string("message_only");
+        textPacket.objectValue["raw"] = bedrock::ProtoDefValue::string("hello from schema encoder");
+        textPacket.objectValue["tip"] = bedrock::ProtoDefValue::string("");
+        textPacket.objectValue["system_message"] = bedrock::ProtoDefValue::string("");
+        textPacket.objectValue["text_object_whisper"] = bedrock::ProtoDefValue::string("");
+        textPacket.objectValue["text_object_announcement"] = bedrock::ProtoDefValue::string("");
+        textPacket.objectValue["text_object"] = bedrock::ProtoDefValue::string("");
+        textPacket.objectValue["has_filtered_message"] = bedrock::ProtoDefValue::boolean(false);
+    }
+    ok = checkSchemaEncode(version, "text", textPacket) && ok;
+
+    auto movePlayer = object({
+        {"runtime_id", bedrock::ProtoDefValue::uinteger(1)},
+        {"position", object({
+            {"x", bedrock::ProtoDefValue::floating(0.0)},
+            {"y", bedrock::ProtoDefValue::floating(64.0)},
+            {"z", bedrock::ProtoDefValue::floating(0.0)}
+        })},
+        {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+        {"yaw", bedrock::ProtoDefValue::floating(0.0)},
+        {"head_yaw", bedrock::ProtoDefValue::floating(0.0)},
+        {"mode", bedrock::ProtoDefValue::string("normal")},
+        {"on_ground", bedrock::ProtoDefValue::boolean(true)},
+        {"ridden_runtime_id", bedrock::ProtoDefValue::uinteger(0)},
+        {"tick", bedrock::ProtoDefValue::uinteger(1)}
+    });
+    if (versionEquals(version, "1.26.10")) {
+        movePlayer.objectValue["mode"] = bedrock::ProtoDefValue::uinteger(0);
+    }
+    ok = checkSchemaEncode(version, "move_player", movePlayer) && ok;
+
+    return ok;
+}
+
 } // namespace
 
 int main() {
@@ -130,6 +237,7 @@ int main() {
 
         ok = checkBatchRoundtrip(version, false) && ok;
         ok = checkBatchRoundtrip(version, true) && ok;
+        ok = checkSchemaEncodes(version) && ok;
 
         if (!ok) {
             ++failures;

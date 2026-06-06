@@ -8,7 +8,7 @@ There are three different ideas people often call "changing packets":
 - Make a changed copy of decoded packet fields for your own bot logic.
 - Send or rewrite packets on the network.
 
-The first two are supported by the current high-level API. Network sending is available for a small supported set of client packets. Full high-level sending/rewriting for every game packet is still growing.
+The first two are supported by the current high-level API. Network sending uses the versioned packet schema, like JavaScript `bedrock-protocol` / `protodef`: give `send()` a packet name and a `ProtoDefValue` object shaped like that packet for the selected Minecraft version.
 
 ## Enable Packet Decoding
 
@@ -71,27 +71,52 @@ client.on("text", [](const bedrock::Packet& packet) {
 
 This changes your local copy only. It does not rewrite the packet on the server connection.
 
-## Send A Supported Outgoing Packet
+## Send An Outgoing Packet
 
-The high-level API has `send()` and `queue()` so bot code can use a bedrock-protocol-like shape. `send()` forwards supported packets to the active runtime when the bot is connected. These packets are wired now:
-
-- `request_chunk_radius`
-- `client_cache_status`
-- `set_local_player_as_initialized`
-- `resource_pack_client_response`
+The high-level API has `write()` and `send()` so bot code can use a bedrock-protocol-like shape. `write()` forwards the packet to the active runtime when the bot is connected. Any packet present in the bundled registry for the chosen version can be encoded when you provide the fields required by that packet schema.
 
 ```cpp
-client.send("request_chunk_radius", {
-    {"radius", "20"}
-});
+client.write("request_chunk_radius", bedrock::object({
+    {"chunk_radius", bedrock::i32(20)},
+    {"max_radius", bedrock::u32(0)}
+}));
 ```
 
-Full high-level encoding and network sending for every packet is not finished yet. Unsupported packet names are reported by the runtime instead of being silently sent with a wrong shape.
+Enums use their schema names:
+
+```cpp
+client.write("resource_pack_client_response", bedrock::object({
+    {"response_status", bedrock::str("completed")},
+    {"resourcepackids", bedrock::array({})}
+}));
+```
+
+Nested containers use nested objects:
+
+```cpp
+client.write("move_player", bedrock::object({
+    {"runtime_id", bedrock::u64(1)},
+    {"position", bedrock::object({
+        {"x", bedrock::f32(0.0f)},
+        {"y", bedrock::f32(64.0f)},
+        {"z", bedrock::f32(0.0f)}
+    })},
+    {"pitch", bedrock::f32(0.0f)},
+    {"yaw", bedrock::f32(0.0f)},
+    {"head_yaw", bedrock::f32(0.0f)},
+    {"mode", bedrock::str("normal")},
+    {"on_ground", bedrock::boolean(true)},
+    {"ridden_runtime_id", bedrock::u64(0)},
+    {"tick", bedrock::u64(1)}
+}));
+```
+
+Some packet shapes change between versions. For example, `text` in newer versions has extra `category`/filtered-message fields. Always use the schema for the version selected in `createClient()`.
 
 You can inspect queued packets:
 
 ```cpp
-for (const auto& [name, fields] : client.queuedPackets()) {
+for (const auto& [name, fields] : client.queuedPacketValues()) {
     std::cout << "queued " << name << "\n";
 }
 ```
@@ -102,6 +127,7 @@ The repository includes:
 
 ```text
 examples/packet_event_bot.cpp
+examples/medium_bot.cpp
 ```
 
 Build the library examples:
@@ -120,12 +146,14 @@ Run the example from the build directory after editing host/version/offline sett
 
 ```bash
 ./build/packet-event-bot
+./build/medium-bot
 ```
 
 Windows:
 
 ```powershell
 .\build\packet-event-bot.exe
+.\build\medium-bot.exe
 ```
 
 ## Find Packet Field Names

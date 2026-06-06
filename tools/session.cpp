@@ -7,6 +7,9 @@
 #include <bedrock/protocol/PacketRegistry.hpp>
 #include <bedrock/protocol/ProtocolDefinition.hpp>
 #include <bedrock/protocol/PacketFactory.hpp>
+#include <bedrock/protocol/VersionedPacketCodec.hpp>
+#include <bedrock/protodef/ProtoDefJson.hpp>
+#include <bedrock/protodef/ProtoDefPacketEncoder.hpp>
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -32,6 +35,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 #include <bedrock/events/PacketEventApi.hpp>
 
@@ -1601,7 +1605,7 @@ static void writeTextFile(const std::string& path, const std::string& text) {
 
 struct RuntimeCommand {
     std::string name;
-    std::map<std::string, std::string> fields;
+    bedrock::ProtoDefValue value;
 };
 
 static std::string unescapeCommandValue(const std::string& input) {
@@ -1670,22 +1674,14 @@ static std::vector<RuntimeCommand> pollRuntimeCommands(
         }
 
         auto parts = splitTabs(line);
-        if (parts.size() < 2 || parts[0] != "send") {
+        if (parts.size() < 3 || parts[0] != "send_json") {
             offset = in.tellg();
             continue;
         }
 
         RuntimeCommand command;
         command.name = unescapeCommandValue(parts[1]);
-        for (size_t i = 2; i < parts.size(); i++) {
-            auto eq = parts[i].find('=');
-            if (eq == std::string::npos) {
-                continue;
-            }
-            auto key = unescapeCommandValue(parts[i].substr(0, eq));
-            auto value = unescapeCommandValue(parts[i].substr(eq + 1));
-            command.fields[key] = value;
-        }
+        command.value = bedrock::protoDefValueFromJson(unescapeCommandValue(parts[2]));
         commands.push_back(std::move(command));
         offset = in.tellg();
     }
@@ -1702,68 +1698,11 @@ static std::vector<RuntimeCommand> pollRuntimeCommands(
     return commands;
 }
 
-static bool fieldBool(
-    const std::map<std::string, std::string>& fields,
-    const std::string& key,
-    bool fallback = false
-) {
-    auto it = fields.find(key);
-    if (it == fields.end()) return fallback;
-    return it->second == "1" || it->second == "true" || it->second == "yes" || it->second == "on";
-}
-
-static int32_t fieldInt32(
-    const std::map<std::string, std::string>& fields,
-    const std::string& key,
-    int32_t fallback = 0
-) {
-    auto it = fields.find(key);
-    if (it == fields.end() || it->second.empty()) return fallback;
-    return static_cast<int32_t>(std::stoi(it->second));
-}
-
-static uint64_t fieldUInt64(
-    const std::map<std::string, std::string>& fields,
-    const std::string& key,
-    uint64_t fallback = std::numeric_limits<uint64_t>::max()
-) {
-    auto it = fields.find(key);
-    if (it == fields.end() || it->second.empty()) return fallback;
-    if (it->second == "-1") return std::numeric_limits<uint64_t>::max();
-    return static_cast<uint64_t>(std::stoull(it->second));
-}
-
 static std::vector<uint8_t> makeRuntimeCommandPacket(const RuntimeCommand& command) {
-    if (command.name == "request_chunk_radius") {
-        return bedrock::PacketFactory::requestChunkRadius(
-            fieldInt32(command.fields, "radius", 20)
-        );
-    }
-
-    if (command.name == "client_cache_status") {
-        return bedrock::PacketFactory::clientCacheStatus(
-            fieldBool(command.fields, "enabled", false)
-        );
-    }
-
-    if (
-        command.name == "set_local_player_as_initialized" ||
-        command.name == "set_local_player_initialized"
-    ) {
-        auto runtimeId = fieldUInt64(command.fields, "runtime_entity_id");
-        auto camel = fieldUInt64(command.fields, "runtimeEntityId", runtimeId);
-        return bedrock::PacketFactory::setLocalPlayerInitialized(camel);
-    }
-
-    if (command.name == "resource_pack_client_response") {
-        auto status = command.fields.find("status");
-        if (status != command.fields.end() && status->second == "have_all_packs") {
-            return bedrock::PacketFactory::resourcePackClientResponseHaveAllPacks();
-        }
-        return bedrock::PacketFactory::resourcePackClientResponseCompleted();
-    }
-
-    throw std::runtime_error("unsupported runtime send packet: " + command.name);
+    bedrock::ProtoDefPacketEncoder encoder(g_minecraftVersion);
+    auto payload = encoder.encodePacket(command.name, command.value);
+    auto codec = bedrock::VersionedPacketCodec::forVersion(g_minecraftVersion);
+    return codec.encodeFullPacketByName(command.name, payload);
 }
 
 static std::string readStringVarUIntFromPacket(

@@ -42,12 +42,13 @@ int main() {
 - Resource pack response flow.
 - Compression handling for old and new Bedrock protocol shapes.
 - Packet id/name decoding across bundled protocol versions.
+- Schema-based packet encoding and `client.write(packetName, bedrock::object({...}))` for packets in the bundled version registry.
 - Optional deep packet JSON decoding for debugging.
 - `bedrock-protocol`-style client creation and event handlers.
 - CMake package install for separate bot projects.
 - Windows through MSYS2/MinGW, Linux, and Termux builds.
 
-Current limitation: the public high-level API is strongest for connecting, receiving packets, inspecting events, and writing bot logic around incoming packets. Full high-level encoding/sending for every game packet is still growing.
+For outgoing packets, pass fields in the same shape as the packet schema for the selected version. This mirrors the JavaScript `bedrock-protocol` / `protodef` model: enums use their string names, arrays use arrays, optional values use `null`, buffers use bytes, and nested containers use nested objects.
 
 ## Quick Start
 
@@ -138,6 +139,33 @@ client.onText([](const bedrock::TextPacket& text) {});
 ```
 
 Packet examples for bots are in [docs/BOT_PACKETS.md](docs/BOT_PACKETS.md).
+
+Sending a schema-shaped packet:
+
+```cpp
+client.write("request_chunk_radius", bedrock::object({
+    {"chunk_radius", bedrock::i32(20)},
+    {"max_radius", bedrock::u32(0)}
+}));
+```
+
+Examples included in this repository:
+
+| Example | Purpose |
+|---|---|
+| `simple-create-client-bot` | Minimal connect/event bot. |
+| `packet-event-bot` | Packet event logging and one outgoing schema packet. |
+| `medium-bot` | Medium bot example with packet handlers, chunk radius request, and movement packet writing. |
+
+## Roadmap To JavaScript bedrock-protocol Parity
+
+Current focus is matching the JavaScript `bedrock-protocol` model rather than adding one-off packet shortcuts.
+
+- Keep packet read/write schema-driven through bundled `minecraft-data` and generated protocol tables.
+- Continue porting `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes`.
+- Add typed convenience builders on top of schema objects without replacing schema objects.
+- Add more live integration tests for online/offline servers and version-specific packet shapes.
+- Add higher-level bot helpers for chat, movement, inventory, entities, chunks, and resource packs.
 
 ## Supported Versions
 

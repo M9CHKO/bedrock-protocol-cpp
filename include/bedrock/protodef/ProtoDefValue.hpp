@@ -13,6 +13,7 @@ struct ProtoDefValue {
         Bool,
         Int,
         UInt,
+        Double,
         String,
         Bytes,
         Object,
@@ -24,6 +25,7 @@ struct ProtoDefValue {
     bool boolValue = false;
     int64_t intValue = 0;
     uint64_t uintValue = 0;
+    double doubleValue = 0.0;
     std::string stringValue;
     std::vector<uint8_t> bytesValue;
 
@@ -52,6 +54,13 @@ struct ProtoDefValue {
         ProtoDefValue x;
         x.kind = Kind::UInt;
         x.uintValue = v;
+        return x;
+    }
+
+    static ProtoDefValue floating(double v) {
+        ProtoDefValue x;
+        x.kind = Kind::Double;
+        x.doubleValue = v;
         return x;
     }
 

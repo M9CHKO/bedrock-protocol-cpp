@@ -51,6 +51,14 @@ public:
         data_.push_back(static_cast<uint8_t>(v));
     }
 
+    void varuint64(uint64_t v) {
+        while (v >= 0x80) {
+            data_.push_back(static_cast<uint8_t>((v & 0x7f) | 0x80));
+            v >>= 7;
+        }
+        data_.push_back(static_cast<uint8_t>(v));
+    }
+
     void zigzag32(int32_t v) {
         uint32_t encoded = (static_cast<uint32_t>(v) << 1) ^ static_cast<uint32_t>(v >> 31);
         varuint32(encoded);

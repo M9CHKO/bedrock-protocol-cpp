@@ -1,6 +1,8 @@
 #pragma once
 
 #include <bedrock/protocol/ProtocolDefinition.hpp>
+#include <bedrock/protodef/ProtoDefJson.hpp>
+#include <bedrock/protodef/ProtoDefValue.hpp>
 
 #include <cstdint>
 #include <chrono>
@@ -108,21 +110,24 @@ public:
         textHandlers_.push_back(std::move(handler));
     }
 
-    // Bedrock-protocol-like API. Encoding is still intentionally limited; send()/queue()
-    // stores outbound intent so bot code can be written now and wired to encoders later.
-    void queue(const std::string& packetName, std::map<std::string, std::string> fields) {
-        queued_.push_back({packetName, std::move(fields)});
+    // Bedrock-protocol-like API.
+    void queue(const std::string& packetName, ProtoDefValue value) {
+        queuedValues_.push_back({packetName, std::move(value)});
     }
 
-    void send(const std::string& packetName, std::map<std::string, std::string> fields) {
-        queue(packetName, fields);
+    void send(const std::string& packetName, ProtoDefValue value) {
+        queue(packetName, value);
         if (!commandFilePath_.empty()) {
-            appendRuntimeCommand(packetName, fields);
+            appendRuntimeCommand(packetName, value);
         }
     }
 
-    const auto& queuedPackets() const {
-        return queued_;
+    void write(const std::string& packetName, ProtoDefValue value) {
+        send(packetName, std::move(value));
+    }
+
+    const auto& queuedPacketValues() const {
+        return queuedValues_;
     }
 
     int connect() {
@@ -181,7 +186,7 @@ private:
     std::unordered_map<std::string, std::vector<PacketHandler>> handlers_;
     std::vector<PacketHandler> anyHandlers_;
     std::vector<TextHandler> textHandlers_;
-    std::vector<std::pair<std::string, std::map<std::string, std::string>>> queued_;
+    std::vector<std::pair<std::string, ProtoDefValue>> queuedValues_;
     std::string commandFilePath_;
 
     void normalizeOptions() {
@@ -315,17 +320,17 @@ private:
 
     void appendRuntimeCommand(
         const std::string& packetName,
-        const std::map<std::string, std::string>& fields
+        const ProtoDefValue& value
     ) const {
         std::ofstream out(commandFilePath_, std::ios::binary | std::ios::app);
         if (!out) {
             return;
         }
 
-        out << "send\t" << escapeCommandValue(packetName);
-        for (const auto& [key, value] : fields) {
-            out << "\t" << escapeCommandValue(key) << "=" << escapeCommandValue(value);
-        }
+        out << "send_json\t"
+            << escapeCommandValue(packetName)
+            << "\t"
+            << escapeCommandValue(protoDefValueToJson(value));
         out << "\n";
     }
 

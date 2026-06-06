@@ -92,6 +92,9 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
 
     add_executable(packet-event-bot examples/packet_event_bot.cpp)
     target_link_libraries(packet-event-bot PRIVATE BedrockProtocol::bedrock_protocol)
+
+    add_executable(medium-bot examples/medium_bot.cpp)
+    target_link_libraries(medium-bot PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
 
 if(BEDROCK_PROTOCOL_CPP_INSTALL)
@@ -113,7 +116,7 @@ if(BEDROCK_PROTOCOL_CPP_INSTALL)
     endif()
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
-        install(TARGETS simple-create-client-bot packet-event-bot
+        install(TARGETS simple-create-client-bot packet-event-bot medium-bot
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

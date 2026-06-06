@@ -20,13 +20,14 @@ int main() {
     client.on("start_game", [&client](const bedrock::Packet&) {
         std::cout << "Joined world\n";
 
-        client.send("request_chunk_radius", {
-            {"radius", "20"}
-        });
+        client.write("request_chunk_radius", bedrock::object({
+            {"chunk_radius", bedrock::i32(20)},
+            {"max_radius", bedrock::u32(0)}
+        }));
 
-        for (const auto& [name, fields] : client.queuedPackets()) {
+        for (const auto& [name, fields] : client.queuedPacketValues()) {
             std::cout << "outgoing packet requested: " << name
-                      << " fields=" << fields.size() << "\n";
+                      << " fields=" << fields.objectValue.size() << "\n";
         }
     });
 

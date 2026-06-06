@@ -1,0 +1,27 @@
+* text=auto
+
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+CMakePresets.json text eol=lf
+*.md text eol=lf
+*.hpp text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.c text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.tsv text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.bin binary
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary

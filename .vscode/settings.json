@@ -1,0 +1,19 @@
+{
+  "cmake.configureOnOpen": true,
+  "cmake.useCMakePresets": "always",
+  "cmake.configurePreset": "release",
+  "cmake.buildPreset": "release",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/src",
+    "${workspaceFolder}/tools",
+    "${workspaceFolder}/bots",
+    "${workspaceFolder}/examples"
+  ],
+  "files.associations": {
+    "*.hpp": "cpp",
+    "*.cpp": "cpp"
+  }
+}

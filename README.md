@@ -1,6 +1,6 @@
 # Bedrock Protocol C++
 
-`bedrock_protocol_cpp` is a C++20 Minecraft Bedrock client library inspired by the JavaScript [`bedrock-protocol`](https://github.com/PrismarineJS/bedrock-protocol) API.
+`bedrock-protocol-cpp` is a C++20 Minecraft Bedrock client library inspired by the JavaScript [`bedrock-protocol`](https://github.com/PrismarineJS/bedrock-protocol) API.
 
 It is built for bot projects: you write normal C++ code, put connection settings in `bedrock::createClient({...})`, build your bot, and run your bot executable without passing host/version/user arguments in the terminal.
 
@@ -54,14 +54,14 @@ Current limitation: the public high-level API is strongest for connecting, recei
 Build and install the library once:
 
 ```bash
-cd bedrock_protocol_cpp
+cd bedrock-protocol-cpp
 ./scripts/build.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-cd C:\path\to\bedrock_protocol_cpp
+cd C:\path\to\bedrock-protocol-cpp
 .\scripts\build.ps1
 ```
 
@@ -84,12 +84,12 @@ Detailed beginner instructions are here:
 The build scripts install into `install/` by default:
 
 ```text
-bedrock_protocol_cpp/
+bedrock-protocol-cpp/
   install/
     bin/                       runtime helpers
     include/                   public C++ headers
     lib/                       static library and CMake package files
-    share/bedrock_protocol/    protocol data and clientData template
+    share/bedrock-protocol-cpp/  protocol data and clientData template
 ```
 
 You do not rebuild the library every time you edit your bot. Rebuild the library only when files inside this library change. For normal bot development, rebuild only your bot project.
@@ -220,10 +220,10 @@ Expected result:
 Open the library folder itself:
 
 ```text
-C:\path\to\bedrock_protocol_cpp
+C:\path\to\bedrock-protocol-cpp
 ```
 
-Do not open the parent folder that contains `bedrock_protocol_cpp/`, `node_modules/`, logs, and zip files. The checked-in `.vscode/settings.json` expects `${workspaceFolder}` to be the library root.
+Do not open the parent folder that contains `bedrock-protocol-cpp/`, `node_modules/`, logs, and zip files. The checked-in `.vscode/settings.json` expects `${workspaceFolder}` to be the library root.
 
 Then run:
 

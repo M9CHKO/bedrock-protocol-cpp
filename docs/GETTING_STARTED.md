@@ -8,11 +8,11 @@ Recommended layout:
 
 ```text
 workspace/
-  bedrock_protocol_cpp/
+  bedrock-protocol-cpp/
   my_bot/
 ```
 
-`bedrock_protocol_cpp` is the library. `my_bot` is your own project. You normally rebuild `my_bot` while writing bot logic. You rebuild `bedrock_protocol_cpp` only when the library itself changes.
+`bedrock-protocol-cpp` is the library. `my_bot` is your own project. You normally rebuild `my_bot` while writing bot logic. You rebuild `bedrock-protocol-cpp` only when the library itself changes.
 
 ## 2. Build The Library
 
@@ -23,7 +23,7 @@ Use MSYS2/MinGW. Native MSVC is not supported yet.
 PowerShell:
 
 ```powershell
-cd C:\path\to\workspace\bedrock_protocol_cpp
+cd C:\path\to\workspace\bedrock-protocol-cpp
 .\scripts\build.ps1
 ```
 
@@ -44,7 +44,7 @@ Configure/build without installing:
 Install dependencies and build:
 
 ```bash
-cd /path/to/workspace/bedrock_protocol_cpp
+cd /path/to/workspace/bedrock-protocol-cpp
 chmod +x scripts/build.sh
 ./scripts/build.sh --deps
 ```
@@ -66,7 +66,7 @@ Debug build:
 Install dependencies and build:
 
 ```bash
-cd /path/to/workspace/bedrock_protocol_cpp
+cd /path/to/workspace/bedrock-protocol-cpp
 chmod +x scripts/build.sh
 ./scripts/build.sh --deps
 ```
@@ -148,7 +148,7 @@ target_link_libraries(my_bedrock_bot PRIVATE BedrockProtocol::bedrock_protocol)
 
 ```powershell
 cd C:\path\to\workspace\my_bot
-$prefix = "C:\path\to\workspace\bedrock_protocol_cpp\install"
+$prefix = "C:\path\to\workspace\bedrock-protocol-cpp\install"
 cmake -S . -B build -DCMAKE_PREFIX_PATH="$prefix"
 cmake --build build
 ```
@@ -157,7 +157,7 @@ cmake --build build
 
 ```bash
 cd /path/to/workspace/my_bot
-prefix=/path/to/workspace/bedrock_protocol_cpp/install
+prefix=/path/to/workspace/bedrock-protocol-cpp/install
 cmake -S . -B build -DCMAKE_PREFIX_PATH="$prefix"
 cmake --build build -j"$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)"
 ```
@@ -167,14 +167,14 @@ cmake --build build -j"$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)"
 ### Windows
 
 ```powershell
-$env:BEDROCK_PROTOCOL_BIN_DIR = "C:\path\to\workspace\bedrock_protocol_cpp\install\bin"
+$env:BEDROCK_PROTOCOL_BIN_DIR = "C:\path\to\workspace\bedrock-protocol-cpp\install\bin"
 .\build\my_bedrock_bot.exe
 ```
 
 ### Linux / Termux
 
 ```bash
-export BEDROCK_PROTOCOL_BIN_DIR=/path/to/workspace/bedrock_protocol_cpp/install/bin
+export BEDROCK_PROTOCOL_BIN_DIR=/path/to/workspace/bedrock-protocol-cpp/install/bin
 ./build/my_bedrock_bot
 ```
 
@@ -198,8 +198,8 @@ Online mode uses Xbox Live authentication. Public servers usually reject offline
 
 ## 8. Common Beginner Fixes
 
-If CMake cannot find the library, check `CMAKE_PREFIX_PATH`. It must point to `bedrock_protocol_cpp/install`.
+If CMake cannot find the library, check `CMAKE_PREFIX_PATH`. It must point to `bedrock-protocol-cpp/install`.
 
-If the bot cannot find the runtime helper, set `BEDROCK_PROTOCOL_BIN_DIR` to `bedrock_protocol_cpp/install/bin`.
+If the bot cannot find the runtime helper, set `BEDROCK_PROTOCOL_BIN_DIR` to `bedrock-protocol-cpp/install/bin`.
 
-If VS Code cannot find `<bedrock/bedrock.hpp>`, open the `bedrock_protocol_cpp` folder itself, not its parent folder, and run `CMake: Configure`.
+If VS Code cannot find `<bedrock/bedrock.hpp>`, open the `bedrock-protocol-cpp` folder itself, not its parent folder, and run `CMake: Configure`.

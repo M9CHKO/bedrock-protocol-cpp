@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
-project(bedrock_protocol_cpp VERSION 0.1.0 LANGUAGES CXX)
+project(bedrock-protocol-cpp VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(BEDROCK_CPP_BUILD_TOOLS "Build command-line helpers: bedrock, bedrock-session, login, ping" ON)
-option(BEDROCK_CPP_BUILD_BOT "Build local bot that links bedrock_protocol" ON)
-option(BEDROCK_CPP_BUILD_EXAMPLES "Build example bots" ON)
-option(BEDROCK_CPP_INSTALL "Enable install rules" ON)
+option(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS "Build command-line helpers: bedrock, bedrock-session, login, ping" ON)
+option(BEDROCK_PROTOCOL_CPP_BUILD_BOT "Build local bot that links bedrock_protocol" ON)
+option(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES "Build example bots" ON)
+option(BEDROCK_PROTOCOL_CPP_INSTALL "Enable install rules" ON)
 
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -41,7 +41,6 @@ add_library(bedrock_protocol
     src/util/VarInt.cpp
 )
 add_library(BedrockProtocol::bedrock_protocol ALIAS bedrock_protocol)
-add_library(BedrockCpp::bedrock_cpp ALIAS bedrock_protocol)
 add_library(Bedrock::bedrock ALIAS bedrock_protocol)
 
 # Backward compatible target name for old local tests.
@@ -61,7 +60,7 @@ target_include_directories(bedrock_protocol
 target_link_libraries(bedrock_protocol PUBLIC ZLIB::ZLIB OpenSSL::Crypto)
 target_compile_definitions(bedrock_protocol PUBLIC _DEFAULT_SOURCE)
 
-if(BEDROCK_CPP_BUILD_TOOLS)
+if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
     add_executable(bedrock tools/bedrock.cpp)
     target_link_libraries(bedrock PRIVATE BedrockProtocol::bedrock_protocol)
 
@@ -82,12 +81,12 @@ if(BEDROCK_CPP_BUILD_TOOLS)
     target_link_libraries(bedrock-session PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
 
-if(BEDROCK_CPP_BUILD_BOT)
+if(BEDROCK_PROTOCOL_CPP_BUILD_BOT)
     add_executable(bot bots/bot.cpp)
     target_link_libraries(bot PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
 
-if(BEDROCK_CPP_BUILD_EXAMPLES)
+if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
     add_executable(simple-create-client-bot examples/simple_create_client_bot.cpp)
     target_link_libraries(simple-create-client-bot PRIVATE BedrockProtocol::bedrock_protocol)
 
@@ -95,7 +94,7 @@ if(BEDROCK_CPP_BUILD_EXAMPLES)
     target_link_libraries(packet-event-bot PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
 
-if(BEDROCK_CPP_INSTALL)
+if(BEDROCK_PROTOCOL_CPP_INSTALL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 
@@ -107,23 +106,23 @@ if(BEDROCK_CPP_INSTALL)
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
 
-    if(BEDROCK_CPP_BUILD_TOOLS)
+    if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
         install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
 
-    if(BEDROCK_CPP_BUILD_EXAMPLES)
+    if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
         install(TARGETS simple-create-client-bot packet-event-bot
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
 
     install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-    install(DIRECTORY docs DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock_protocol OPTIONAL)
-    install(FILES data/client_data_template.json DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock_protocol/data)
-    install(DIRECTORY data/minecraft-data DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock_protocol/data OPTIONAL)
-    install(DIRECTORY data/generated DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock_protocol/data OPTIONAL)
+    install(DIRECTORY docs DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock-protocol-cpp OPTIONAL)
+    install(FILES data/client_data_template.json DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock-protocol-cpp/data)
+    install(DIRECTORY data/minecraft-data DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock-protocol-cpp/data OPTIONAL)
+    install(DIRECTORY data/generated DESTINATION ${CMAKE_INSTALL_DATADIR}/bedrock-protocol-cpp/data OPTIONAL)
 
     install(EXPORT BedrockProtocolTargets
         FILE BedrockProtocolTargets.cmake

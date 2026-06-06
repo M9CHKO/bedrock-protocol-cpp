@@ -67,12 +67,12 @@ private:
             if (*env) return std::filesystem::path(env);
         }
         if (const char* env = std::getenv("XDG_CACHE_HOME")) {
-            if (*env) return std::filesystem::path(env) / "bedrock-cpp" / "xbox";
+            if (*env) return std::filesystem::path(env) / "bedrock-protocol-cpp" / "xbox";
         }
         if (const char* home = std::getenv("HOME")) {
-            if (*home) return std::filesystem::path(home) / ".cache" / "bedrock-cpp" / "xbox";
+            if (*home) return std::filesystem::path(home) / ".cache" / "bedrock-protocol-cpp" / "xbox";
         }
-        return std::filesystem::temp_directory_path() / "bedrock-cpp" / "xbox";
+        return std::filesystem::temp_directory_path() / "bedrock-protocol-cpp" / "xbox";
     }
 
     static std::string sanitize(const std::string& input) {

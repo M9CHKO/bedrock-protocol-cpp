@@ -771,8 +771,7 @@ int main(int argc, char** argv) {
     }
     minecraftDataRoots.push_back(exeDir / "data" / "minecraft-data");
     minecraftDataRoots.push_back(exeDir.parent_path() / "data" / "minecraft-data");
-    minecraftDataRoots.push_back(exeDir.parent_path() / "share" / "bedrock_protocol" / "data" / "minecraft-data");
-    minecraftDataRoots.push_back(exeDir.parent_path() / "share" / "bedrock_cpp" / "data" / "minecraft-data");
+    minecraftDataRoots.push_back(exeDir.parent_path() / "share" / "bedrock-protocol-cpp" / "data" / "minecraft-data");
     minecraftDataRoots.push_back(std::filesystem::current_path() / "data" / "minecraft-data");
 
     clientPayload = readVersionedSteveClientData(version, minecraftDataRoots, clientPayloadSource);
@@ -787,8 +786,7 @@ int main(int argc, char** argv) {
 
     fallbackTemplates.push_back(exeDir / "data" / "client_data_template.json");
     fallbackTemplates.push_back(exeDir.parent_path() / "data" / "client_data_template.json");
-    fallbackTemplates.push_back(exeDir.parent_path() / "share" / "bedrock_protocol" / "data" / "client_data_template.json");
-    fallbackTemplates.push_back(exeDir.parent_path() / "share" / "bedrock_cpp" / "data" / "client_data_template.json");
+    fallbackTemplates.push_back(exeDir.parent_path() / "share" / "bedrock-protocol-cpp" / "data" / "client_data_template.json");
     fallbackTemplates.push_back(std::filesystem::current_path() / "data" / "client_data_template.json");
 
     if (clientPayload.empty()) {

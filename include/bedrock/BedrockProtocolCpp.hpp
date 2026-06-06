@@ -1,6 +1,6 @@
 #pragma once
 
-// Backward-compatible public header.
+// Convenience aggregate header for the bedrock-protocol-cpp project.
 // New bots can simply use: #include <bedrock/bedrock.hpp>
 
 #include <bedrock/bedrock.hpp>

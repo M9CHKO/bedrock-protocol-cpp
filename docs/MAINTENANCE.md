@@ -7,14 +7,14 @@ Use this file when you change the library itself, update protocol data, or prepa
 Windows:
 
 ```powershell
-cd C:\path\to\bedrock_protocol_cpp
+cd C:\path\to\bedrock-protocol-cpp
 .\scripts\build.ps1
 ```
 
 Linux / Termux:
 
 ```bash
-cd /path/to/bedrock_protocol_cpp
+cd /path/to/bedrock-protocol-cpp
 ./scripts/build.sh
 ```
 

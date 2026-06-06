@@ -3,8 +3,10 @@
 #include <bedrock/protocol/ProtocolDefinition.hpp>
 
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <sstream>
@@ -113,7 +115,10 @@ public:
     }
 
     void send(const std::string& packetName, std::map<std::string, std::string> fields) {
-        queue(packetName, std::move(fields));
+        queue(packetName, fields);
+        if (!commandFilePath_.empty()) {
+            appendRuntimeCommand(packetName, fields);
+        }
     }
 
     const auto& queuedPackets() const {
@@ -132,10 +137,18 @@ public:
         }
 
         setProcessEnv("BEDROCK_API_DUMP", "1");
+        commandFilePath_ = makeTempCommandFilePath();
+        {
+            std::ofstream commandFile(commandFilePath_, std::ios::binary | std::ios::trunc);
+            if (!commandFile) {
+                throw std::runtime_error("failed to create runtime command file: " + commandFilePath_);
+            }
+        }
 
         std::string cmd = buildCommand();
         FILE* pipe = openPipe(cmd);
         if (!pipe) {
+            cleanupCommandFile();
             throw std::runtime_error("failed to start bedrock");
         }
 
@@ -152,6 +165,7 @@ public:
         }
 
         int rc = closePipe(pipe);
+        cleanupCommandFile();
         if (rc != 0 && options_.debug != DebugMode::Off) {
             std::cerr << "[ERROR] bedrock helper stopped before a clean exit. Check version/server or run with another supported version.\n";
         }
@@ -168,6 +182,7 @@ private:
     std::vector<PacketHandler> anyHandlers_;
     std::vector<TextHandler> textHandlers_;
     std::vector<std::pair<std::string, std::map<std::string, std::string>>> queued_;
+    std::string commandFilePath_;
 
     void normalizeOptions() {
         if (options_.version.empty() || options_.version == "auto" || options_.version == "latest") {
@@ -219,6 +234,7 @@ private:
         if (options_.debug == DebugMode::Trace) cmd << " --trace";
         else if (options_.debug == DebugMode::Events || options_.debug == DebugMode::Packets) cmd << " --debug";
         else if (options_.quiet) cmd << " --quiet";
+        if (!commandFilePath_.empty()) cmd << " --command-file " << shellQuote(commandFilePath_);
 
         for (const auto& flag : options_.extraFlags) {
             cmd << " " << flag;
@@ -265,6 +281,52 @@ private:
         }
 
         return path.string();
+    }
+
+    static std::string makeTempCommandFilePath() {
+        auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        auto path = std::filesystem::temp_directory_path()
+            / ("bedrock-protocol-cpp-api-" + std::to_string(stamp) + ".commands");
+        return path.string();
+    }
+
+    void cleanupCommandFile() {
+        if (!commandFilePath_.empty()) {
+            std::error_code ec;
+            std::filesystem::remove(commandFilePath_, ec);
+            commandFilePath_.clear();
+        }
+    }
+
+    static std::string escapeCommandValue(const std::string& input) {
+        static constexpr char hex[] = "0123456789ABCDEF";
+        std::string out;
+        for (unsigned char c : input) {
+            if (c == '%' || c == '\t' || c == '\n' || c == '\r' || c == '=') {
+                out.push_back('%');
+                out.push_back(hex[(c >> 4) & 0x0f]);
+                out.push_back(hex[c & 0x0f]);
+            } else {
+                out.push_back(static_cast<char>(c));
+            }
+        }
+        return out;
+    }
+
+    void appendRuntimeCommand(
+        const std::string& packetName,
+        const std::map<std::string, std::string>& fields
+    ) const {
+        std::ofstream out(commandFilePath_, std::ios::binary | std::ios::app);
+        if (!out) {
+            return;
+        }
+
+        out << "send\t" << escapeCommandValue(packetName);
+        for (const auto& [key, value] : fields) {
+            out << "\t" << escapeCommandValue(key) << "=" << escapeCommandValue(value);
+        }
+        out << "\n";
     }
 
     static std::string shellQuote(const std::string& s) {

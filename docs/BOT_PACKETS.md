@@ -8,7 +8,7 @@ There are three different ideas people often call "changing packets":
 - Make a changed copy of decoded packet fields for your own bot logic.
 - Send or rewrite packets on the network.
 
-The first two are supported by the current high-level API. Full network sending/rewriting for every game packet is still limited; `client.send()` and `client.queue()` currently record outbound intent so bot code can be written against the future API shape.
+The first two are supported by the current high-level API. Network sending is available for a small supported set of client packets. Full high-level sending/rewriting for every game packet is still growing.
 
 ## Enable Packet Decoding
 
@@ -71,18 +71,22 @@ client.on("text", [](const bedrock::Packet& packet) {
 
 This changes your local copy only. It does not rewrite the packet on the server connection.
 
-## Prepare An Outgoing Packet
+## Send A Supported Outgoing Packet
 
-The high-level API has `send()` and `queue()` so bot code can use a bedrock-protocol-like shape:
+The high-level API has `send()` and `queue()` so bot code can use a bedrock-protocol-like shape. `send()` forwards supported packets to the active runtime when the bot is connected. These packets are wired now:
+
+- `request_chunk_radius`
+- `client_cache_status`
+- `set_local_player_as_initialized`
+- `resource_pack_client_response`
 
 ```cpp
-client.send("text", {
-    {"type", "chat"},
-    {"message", "Hello from C++ bot"}
+client.send("request_chunk_radius", {
+    {"radius", "20"}
 });
 ```
 
-Current status: this records the packet intent in the client queue. Full high-level encoding and network sending for every packet is not finished yet.
+Full high-level encoding and network sending for every packet is not finished yet. Unsupported packet names are reported by the runtime instead of being silently sent with a wrong shape.
 
 You can inspect queued packets:
 

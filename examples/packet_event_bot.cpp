@@ -20,13 +20,12 @@ int main() {
     client.on("start_game", [&client](const bedrock::Packet&) {
         std::cout << "Joined world\n";
 
-        client.send("text", {
-            {"type", "chat"},
-            {"message", "Hello from C++ bot"}
+        client.send("request_chunk_radius", {
+            {"radius", "20"}
         });
 
         for (const auto& [name, fields] : client.queuedPackets()) {
-            std::cout << "queued outgoing packet intent: " << name
+            std::cout << "outgoing packet requested: " << name
                       << " fields=" << fields.size() << "\n";
         }
     });

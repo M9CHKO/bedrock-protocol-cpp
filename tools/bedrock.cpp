@@ -296,6 +296,7 @@ int main(int argc, char** argv) {
     bool packetJson = false;
     bool regenLogin = false;
     bool offline = false;
+    std::string commandFilePath;
 
     for (int i = first + 3; i < argc; ++i) {
         std::string arg = argv[i];
@@ -314,6 +315,8 @@ int main(int argc, char** argv) {
             regenLogin = true;
         } else if (arg == "--offline") {
             offline = true;
+        } else if (arg == "--command-file" && i + 1 < argc) {
+            commandFilePath = argv[++i];
         } else if (arg == "--hold" || arg == "hold" || arg == "forever") {
             hold = "--hold";
         } else if (!arg.empty() && arg[0] != '-') {
@@ -435,6 +438,9 @@ int main(int argc, char** argv) {
     }
     cmd << " --version " << shellQuote(version);
     cmd << " --private-key " << shellQuote(privateKeyPath.string());
+    if (!commandFilePath.empty()) {
+        cmd << " --command-file " << shellQuote(commandFilePath);
+    }
 
     FILE* pipe = popen(cmd.str().c_str(), "r");
     g_sessionPipe = pipe;

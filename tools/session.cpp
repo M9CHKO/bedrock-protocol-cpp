@@ -24,6 +24,7 @@
 #include <iomanip>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <random>
@@ -1598,6 +1599,173 @@ static void writeTextFile(const std::string& path, const std::string& text) {
     f.write(text.data(), static_cast<std::streamsize>(text.size()));
 }
 
+struct RuntimeCommand {
+    std::string name;
+    std::map<std::string, std::string> fields;
+};
+
+static std::string unescapeCommandValue(const std::string& input) {
+    std::string out;
+    for (size_t i = 0; i < input.size(); i++) {
+        if (input[i] == '%' && i + 2 < input.size()) {
+            int hi = -1;
+            int lo = -1;
+            auto hex = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+                if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+                return -1;
+            };
+            hi = hex(input[i + 1]);
+            lo = hex(input[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(input[i]);
+    }
+    return out;
+}
+
+static std::vector<std::string> splitTabs(const std::string& line) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (start <= line.size()) {
+        size_t pos = line.find('\t', start);
+        if (pos == std::string::npos) {
+            parts.push_back(line.substr(start));
+            break;
+        }
+        parts.push_back(line.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return parts;
+}
+
+static std::vector<RuntimeCommand> pollRuntimeCommands(
+    const std::string& path,
+    std::streampos& offset
+) {
+    std::vector<RuntimeCommand> commands;
+    if (path.empty()) {
+        return commands;
+    }
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return commands;
+    }
+
+    in.seekg(offset);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            offset = in.tellg();
+            continue;
+        }
+
+        auto parts = splitTabs(line);
+        if (parts.size() < 2 || parts[0] != "send") {
+            offset = in.tellg();
+            continue;
+        }
+
+        RuntimeCommand command;
+        command.name = unescapeCommandValue(parts[1]);
+        for (size_t i = 2; i < parts.size(); i++) {
+            auto eq = parts[i].find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            auto key = unescapeCommandValue(parts[i].substr(0, eq));
+            auto value = unescapeCommandValue(parts[i].substr(eq + 1));
+            command.fields[key] = value;
+        }
+        commands.push_back(std::move(command));
+        offset = in.tellg();
+    }
+
+    if (in.eof()) {
+        in.clear();
+        offset = in.tellg();
+        if (offset == std::streampos(-1)) {
+            in.clear();
+            in.seekg(0, std::ios::end);
+            offset = in.tellg();
+        }
+    }
+    return commands;
+}
+
+static bool fieldBool(
+    const std::map<std::string, std::string>& fields,
+    const std::string& key,
+    bool fallback = false
+) {
+    auto it = fields.find(key);
+    if (it == fields.end()) return fallback;
+    return it->second == "1" || it->second == "true" || it->second == "yes" || it->second == "on";
+}
+
+static int32_t fieldInt32(
+    const std::map<std::string, std::string>& fields,
+    const std::string& key,
+    int32_t fallback = 0
+) {
+    auto it = fields.find(key);
+    if (it == fields.end() || it->second.empty()) return fallback;
+    return static_cast<int32_t>(std::stoi(it->second));
+}
+
+static uint64_t fieldUInt64(
+    const std::map<std::string, std::string>& fields,
+    const std::string& key,
+    uint64_t fallback = std::numeric_limits<uint64_t>::max()
+) {
+    auto it = fields.find(key);
+    if (it == fields.end() || it->second.empty()) return fallback;
+    if (it->second == "-1") return std::numeric_limits<uint64_t>::max();
+    return static_cast<uint64_t>(std::stoull(it->second));
+}
+
+static std::vector<uint8_t> makeRuntimeCommandPacket(const RuntimeCommand& command) {
+    if (command.name == "request_chunk_radius") {
+        return bedrock::PacketFactory::requestChunkRadius(
+            fieldInt32(command.fields, "radius", 20)
+        );
+    }
+
+    if (command.name == "client_cache_status") {
+        return bedrock::PacketFactory::clientCacheStatus(
+            fieldBool(command.fields, "enabled", false)
+        );
+    }
+
+    if (
+        command.name == "set_local_player_as_initialized" ||
+        command.name == "set_local_player_initialized"
+    ) {
+        auto runtimeId = fieldUInt64(command.fields, "runtime_entity_id");
+        auto camel = fieldUInt64(command.fields, "runtimeEntityId", runtimeId);
+        return bedrock::PacketFactory::setLocalPlayerInitialized(camel);
+    }
+
+    if (command.name == "resource_pack_client_response") {
+        auto status = command.fields.find("status");
+        if (status != command.fields.end() && status->second == "have_all_packs") {
+            return bedrock::PacketFactory::resourcePackClientResponseHaveAllPacks();
+        }
+        return bedrock::PacketFactory::resourcePackClientResponseCompleted();
+    }
+
+    throw std::runtime_error("unsupported runtime send packet: " + command.name);
+}
+
 static std::string readStringVarUIntFromPacket(
     const std::vector<uint8_t>& packet,
     size_t& off
@@ -2061,6 +2229,8 @@ int main(int argc, char** argv) {
     int delayAfterNewIncomingMs = 250;
     std::string loginPacketPath = "/tmp/login_packet.bin";
     std::string privateKeyPath;
+    std::string commandFilePath;
+    std::streampos commandFileOffset = 0;
     int holdSeconds = 0;
     bool holdForever = false;
 
@@ -2138,6 +2308,10 @@ int main(int argc, char** argv) {
             }
             if (holdArg == "--private-key" && argi + 1 < argc) {
                 privateKeyPath = argv[++argi];
+                continue;
+            }
+            if (holdArg == "--command-file" && argi + 1 < argc) {
+                commandFilePath = argv[++argi];
                 continue;
             }
             if (holdArg.rfind("--version=", 0) == 0) {
@@ -2285,6 +2459,28 @@ int main(int argc, char** argv) {
                 if (holdElapsed >= holdSeconds) {
                     std::cout << "[HOLD] completed holdSeconds=" << holdSeconds << "\n";
                     break;
+                }
+            }
+
+            for (const auto& command : pollRuntimeCommands(commandFilePath, commandFileOffset)) {
+                try {
+                    auto gamePacket = makeRuntimeCommandPacket(command);
+                    sendGamePacketReliable(
+                        st.sock,
+                        st.target,
+                        sentReliableDatagrams,
+                        datagramSeq,
+                        reliableIndex,
+                        orderedIndex,
+                        gamePacket,
+                        encryptionReadyForInbound,
+                        encryptedSendCounter,
+                        encryptionSecretKeyBytes,
+                        encryptStream.get(),
+                        "ApiSend:" + command.name
+                    );
+                } catch (const std::exception& e) {
+                    std::cerr << "[API-SEND] " << e.what() << "\n";
                 }
             }
 

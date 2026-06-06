@@ -48,7 +48,7 @@ int main() {
 - CMake package install for separate bot projects.
 - Windows through MSYS2/MinGW, Linux, and Termux builds.
 
-For outgoing packets, pass fields in the same shape as the packet schema for the selected version. This mirrors the JavaScript `bedrock-protocol` / `protodef` model: enums use their string names, arrays use arrays, optional values use `null`, buffers use bytes, and nested containers use nested objects.
+For outgoing packets, pass fields in the same shape as the packet schema for the selected version. This mirrors the  `bedrock-protocol-cpp` / `protodef` model: enums use their string names, arrays use arrays, optional values use `null`, buffers use bytes, and nested containers use nested objects.
 
 ## Quick Start
 
@@ -268,9 +268,7 @@ C/C++: Reset IntelliSense Database
 
 ## References
 
-- JavaScript inspiration: [`PrismarineJS/bedrock-protocol`](https://github.com/PrismarineJS/bedrock-protocol)
-- Protocol data: [`PrismarineJS/minecraft-data`](https://github.com/PrismarineJS/minecraft-data)
-- Packet tables: [PrismarineJS Minecraft Data documentation](https://prismarinejs.github.io/minecraft-data/)
+- Packet tables: [Minecraft Data documentation](https://prismarinejs.github.io/minecraft-data/)
 - Mojang protocol notes: [`Mojang/bedrock-protocol-docs`](https://github.com/Mojang/bedrock-protocol-docs)
 
 ## License

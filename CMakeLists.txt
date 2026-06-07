@@ -37,6 +37,7 @@ add_library(bedrock_protocol
     src/protocol/PacketRegistry.cpp
     src/protocol/TypedPacketDispatcher.cpp
     src/protocol/VersionedMcpeCodec.cpp
+    src/server/RakNetServer.cpp
     src/util/BinaryStream.cpp
     src/util/VarInt.cpp
 )
@@ -76,6 +77,9 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
     add_executable(protocol-roundtrip tools/protocol_roundtrip.cpp)
     target_link_libraries(protocol-roundtrip PRIVATE BedrockProtocol::bedrock_protocol)
 
+    add_executable(raknet-server-smoke tools/raknet_server_smoke.cpp)
+    target_link_libraries(raknet-server-smoke PRIVATE BedrockProtocol::bedrock_protocol)
+
     # Runtime helper used by the public API and the bedrock launcher.
     add_executable(bedrock-session tools/session.cpp)
     target_link_libraries(bedrock-session PRIVATE BedrockProtocol::bedrock_protocol)
@@ -95,6 +99,12 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
 
     add_executable(medium-bot examples/medium_bot.cpp)
     target_link_libraries(medium-bot PRIVATE BedrockProtocol::bedrock_protocol)
+
+    add_executable(relay-packet-bot examples/relay_packet_bot.cpp)
+    target_link_libraries(relay-packet-bot PRIVATE BedrockProtocol::bedrock_protocol)
+
+    add_executable(simple-server examples/simple_server.cpp)
+    target_link_libraries(simple-server PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
 
 if(BEDROCK_PROTOCOL_CPP_INSTALL)
@@ -110,13 +120,13 @@ if(BEDROCK_PROTOCOL_CPP_INSTALL)
     )
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
-        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip
+        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip raknet-server-smoke
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
-        install(TARGETS simple-create-client-bot packet-event-bot medium-bot
+        install(TARGETS simple-create-client-bot packet-event-bot medium-bot relay-packet-bot simple-server
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

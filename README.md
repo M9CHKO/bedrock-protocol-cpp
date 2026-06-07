@@ -45,6 +45,8 @@ int main() {
 - Schema-based packet encoding and `client.write(packetName, bedrock::object({...}))` for packets in the bundled version registry.
 - Optional deep packet JSON decoding for debugging.
 - `bedrock-protocol`-style client creation and event handlers.
+- Packet-level relay core with `clientbound` / `serverbound` events, `cancel()`, `replace()`, MCPE repacking, forced `client_cache_status`, and level chunk queueing before `start_game`.
+- Early `createServer` runtime: RakNet ping/open-connection listener, connected RakNet request handling, MCPE packet events, `request_network_settings -> network_settings`, login handshake JWT, encrypted `client_to_server_handshake`, and `join` event.
 - CMake package install for separate bot projects.
 - Windows through MSYS2/MinGW, Linux, and Termux builds.
 
@@ -76,6 +78,7 @@ Detailed beginner instructions are here:
 
 - [Getting Started](docs/GETTING_STARTED.md)
 - [Bot Packet Examples](docs/BOT_PACKETS.md)
+- [Relay API](docs/RELAY.md)
 - [Supported Versions](docs/VERSIONS.md)
 - [Packet Documentation](docs/PACKETS.md)
 - [Updating The Library](docs/MAINTENANCE.md)
@@ -156,6 +159,8 @@ Examples included in this repository:
 | `simple-create-client-bot` | Minimal connect/event bot. |
 | `packet-event-bot` | Packet event logging and one outgoing schema packet. |
 | `medium-bot` | Medium bot example with packet handlers, chunk radius request, and movement packet writing. |
+| `relay-packet-bot` | Packet-level relay example with serverbound/clientbound hooks. |
+| `simple-server` | Minimal `createServer` listener with connect, packet, and join events. |
 
 ## Roadmap To JavaScript bedrock-protocol Parity
 
@@ -163,6 +168,7 @@ Current focus is matching the JavaScript `bedrock-protocol` model rather than ad
 
 - Keep packet read/write schema-driven through bundled `minecraft-data` and generated protocol tables.
 - Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes`. Current C++ handlers cover the common Bedrock schema path plus JavaScript `protodef` numeric endian rules, `bitfield`, `byterot`, `restBuffer`, `MapInfo`, `nbtLoop`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, `entityMetadataItem`, `lstring`, fixed `buffer`/`array` counts, `count`, and `varint128` bitflags.
+- Keep relay behavior aligned with JavaScript `bedrock-protocol/src/relay.js`. The C++ server listener and encrypted join path now exist; the remaining large step is the full Player session/runtime and upstream client bridge so the library can expose a complete network proxy like JS `Relay`.
 - Add typed convenience builders on top of schema objects without replacing schema objects.
 - Add more live integration tests for online/offline servers and version-specific packet shapes.
 - Add higher-level bot helpers for chat, movement, inventory, entities, chunks, and resource packs.
@@ -240,7 +246,7 @@ Run the local protocol roundtrip check:
 Expected result:
 
 ```text
-[ROUNDTRIP] checkedVersions=27 failures=0
+[ROUNDTRIP] checkedVersions=50 failures=0
 ```
 
 ## VS Code

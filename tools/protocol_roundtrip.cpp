@@ -1,5 +1,7 @@
 #include <bedrock/BedrockFramer.hpp>
+#include <bedrock/relay/BedrockRelay.hpp>
 #include <bedrock/protocol/ProtocolDefinition.hpp>
+#include <bedrock/protocol/VersionedMcpeCodec.hpp>
 #include <bedrock/protocol/VersionedPacketCodec.hpp>
 #include <bedrock/protodef/ProtoDefEncoder.hpp>
 #include <bedrock/protodef/ProtoDefPacketEncoder.hpp>
@@ -438,6 +440,153 @@ bool checkSchemaEncodes(const std::string& version) {
     return ok;
 }
 
+bool checkRelayPipeline(const std::string& version) {
+    bool ok = true;
+    auto mcpeCodec = bedrock::VersionedMcpeCodec::forVersion(version);
+    const auto& definition = mcpeCodec.definition();
+    const auto& packetCodec = mcpeCodec.packetCodec();
+
+    auto makeRelay = [&]() {
+        bedrock::BedrockRelayOptions options;
+        options.clientOptions.minecraftVersion = version;
+        options.clientOptions.outgoingCompression = bedrock::VersionedMcpeCompression::Uncompressed;
+        options.clientOptions.autoResourcePackResponses = false;
+        options.clientOptions.autoStartGameInit = false;
+        return bedrock::BedrockRelay(std::move(options));
+    };
+
+    if (definition.hasPacket("play_status")) {
+        auto relay = makeRelay();
+        relay.markDownstreamJoined();
+        bool sawPlayStatus = false;
+        relay.onClientbound([&](bedrock::BedrockRelayPacketEvent& event) {
+            if (event.packet.name == "play_status") {
+                sawPlayStatus = true;
+                event.cancel();
+            }
+        });
+
+        auto packet = packetCodec.makePacketByName("play_status", {0x01});
+        auto mcpe = mcpeCodec.encodeMcpePayload({packet}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto frame = relay.handleClientboundMcpe(mcpe);
+
+        if (!sawPlayStatus || frame.forwardedPackets.size() != 0 || !frame.forwardedMcpe.empty()) {
+            std::cerr << "[FAIL] " << version << " relay clientbound cancel mismatch\n";
+            ok = false;
+        }
+    }
+
+    if (definition.hasPacket("client_cache_status")) {
+        auto relay = makeRelay();
+        relay.markDownstreamJoined();
+        relay.markUpstreamJoined();
+        auto packet = packetCodec.makePacketByName("client_cache_status", {0x01});
+        auto mcpe = mcpeCodec.encodeMcpePayload({packet}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto frame = relay.handleServerboundMcpe(mcpe);
+
+        if (
+            frame.forwardedPackets.size() != 1 ||
+            frame.forwardedPackets[0].name != "client_cache_status" ||
+            frame.forwardedPackets[0].payload != std::vector<uint8_t>{0x00}
+        ) {
+            std::cerr << "[FAIL] " << version << " relay client_cache_status force mismatch\n";
+            ok = false;
+        } else {
+            auto decoded = mcpeCodec.decodeMcpePayload(frame.forwardedMcpe);
+            if (
+                decoded.batch.packets.size() != 1 ||
+                decoded.batch.packets[0].name != "client_cache_status" ||
+                decoded.batch.packets[0].payload != std::vector<uint8_t>{0x00}
+            ) {
+                std::cerr << "[FAIL] " << version << " relay repacked mcpe mismatch\n";
+                ok = false;
+            }
+        }
+
+        auto replacingRelay = makeRelay();
+        replacingRelay.markDownstreamJoined();
+        replacingRelay.markUpstreamJoined();
+        replacingRelay.onServerbound([&](bedrock::BedrockRelayPacketEvent& event) {
+            if (event.packet.name == "client_cache_status") {
+                event.replace(packetCodec.makePacketByName("client_cache_status", {0x01}));
+            }
+        });
+        auto replaced = replacingRelay.handleServerboundMcpe(mcpe);
+        if (
+            replaced.forwardedPackets.size() != 1 ||
+            replaced.forwardedPackets[0].payload != std::vector<uint8_t>{0x01}
+        ) {
+            std::cerr << "[FAIL] " << version << " relay serverbound replace mismatch\n";
+            ok = false;
+        }
+    }
+
+    if (definition.hasPacket("level_chunk") && definition.hasPacket("start_game")) {
+        auto relay = makeRelay();
+        relay.markDownstreamJoined();
+        auto chunk = packetCodec.makePacketByName("level_chunk", {0x11, 0x22, 0x33});
+        auto start = packetCodec.makePacketByName("start_game", {0x44, 0x55});
+
+        auto chunkMcpe = mcpeCodec.encodeMcpePayload({chunk}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto chunkFrame = relay.handleClientboundMcpe(chunkMcpe);
+        if (!chunkFrame.forwardedPackets.empty() || relay.queuedClientboundPacketCount() != 1) {
+            std::cerr << "[FAIL] " << version << " relay level_chunk queue mismatch\n";
+            ok = false;
+        }
+
+        auto startMcpe = mcpeCodec.encodeMcpePayload({start}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto startFrame = relay.handleClientboundMcpe(startMcpe);
+        if (
+            startFrame.forwardedPackets.size() != 2 ||
+            startFrame.forwardedPackets[0].name != "start_game" ||
+            startFrame.forwardedPackets[1].name != "level_chunk" ||
+            relay.queuedClientboundPacketCount() != 0
+        ) {
+            std::cerr << "[FAIL] " << version << " relay start_game release mismatch\n";
+            ok = false;
+        }
+    }
+
+    if (definition.hasPacket("play_status")) {
+        auto relay = makeRelay();
+        auto packet = packetCodec.makePacketByName("play_status", {0x01});
+        auto mcpe = mcpeCodec.encodeMcpePayload({packet}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto queued = relay.handleClientboundMcpe(mcpe);
+
+        if (!queued.queued || relay.downQueueSize() != 1) {
+            std::cerr << "[FAIL] " << version << " relay down queue mismatch\n";
+            ok = false;
+        }
+
+        auto flushed = relay.markDownstreamJoined();
+        if (flushed.size() != 1 || flushed[0].forwardedPackets.size() != 1 || relay.downQueueSize() != 0) {
+            std::cerr << "[FAIL] " << version << " relay down queue flush mismatch\n";
+            ok = false;
+        }
+    }
+
+    if (definition.hasPacket("client_cache_status")) {
+        auto relay = makeRelay();
+        relay.markDownstreamJoined();
+        auto packet = packetCodec.makePacketByName("client_cache_status", {0x01});
+        auto mcpe = mcpeCodec.encodeMcpePayload({packet}, bedrock::VersionedMcpeCompression::Uncompressed);
+        auto queued = relay.handleServerboundMcpe(mcpe);
+
+        if (!queued.queued || relay.upQueueSize() != 1) {
+            std::cerr << "[FAIL] " << version << " relay up queue mismatch\n";
+            ok = false;
+        }
+
+        auto flushed = relay.markUpstreamJoined();
+        if (flushed.size() != 1 || flushed[0].forwardedPackets.size() != 1 || relay.upQueueSize() != 0) {
+            std::cerr << "[FAIL] " << version << " relay up queue flush mismatch\n";
+            ok = false;
+        }
+    }
+
+    return ok;
+}
+
 } // namespace
 
 int main() {
@@ -467,6 +616,7 @@ int main() {
         ok = checkBatchRoundtrip(version, false) && ok;
         ok = checkBatchRoundtrip(version, true) && ok;
         ok = checkSchemaEncodes(version) && ok;
+        ok = checkRelayPipeline(version) && ok;
 
         if (!ok) {
             ++failures;

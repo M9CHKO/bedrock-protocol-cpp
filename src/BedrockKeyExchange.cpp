@@ -351,4 +351,35 @@ DerivedKeyResult BedrockKeyExchange::deriveFromServerHandshakeJwtAndPrivateKeyPe
     return result;
 }
 
+DerivedKeyResult BedrockKeyExchange::deriveFromRemotePublicKeyDerBase64AndPrivateKeyPem(
+    const std::string& remotePublicKeyDerBase64,
+    const std::string& localPrivateKeyPem,
+    const std::vector<uint8_t>& salt
+) {
+    DerivedKeyResult result;
+    result.serverPublicKeyDer = base64Decode(remotePublicKeyDerBase64);
+    result.salt = salt;
+
+    result.sharedSecret = deriveEcdhSharedSecret(
+        localPrivateKeyPem,
+        result.serverPublicKeyDer
+    );
+
+    result.secretKeyBytes = sha256(
+        result.salt,
+        result.sharedSecret
+    );
+
+    if (result.secretKeyBytes.size() < 16) {
+        throw BedrockKeyExchangeError("secret key too small");
+    }
+
+    result.iv16.assign(
+        result.secretKeyBytes.begin(),
+        result.secretKeyBytes.begin() + 16
+    );
+
+    return result;
+}
+
 } // namespace bedrock

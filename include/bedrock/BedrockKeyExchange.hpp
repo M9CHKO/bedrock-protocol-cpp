@@ -28,6 +28,12 @@ public:
         const std::string& clientPrivateKeyPem
     );
 
+    static DerivedKeyResult deriveFromRemotePublicKeyDerBase64AndPrivateKeyPem(
+        const std::string& remotePublicKeyDerBase64,
+        const std::string& localPrivateKeyPem,
+        const std::vector<uint8_t>& salt
+    );
+
     static std::string extractJwtHeaderJson(const std::string& jwt);
     static std::string extractJwtPayloadJson(const std::string& jwt);
 

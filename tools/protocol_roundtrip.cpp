@@ -83,6 +83,14 @@ bool checkPacketRoundtrip(const std::string& version, const std::string& packetN
 bool checkBatchRoundtrip(const std::string& version, bool compressionReady) {
     auto codec = bedrock::VersionedPacketCodec::forVersion(version);
 
+    if (
+        !codec.definition().hasPacket("play_status") ||
+        !codec.definition().hasPacket("resource_pack_client_response") ||
+        !codec.definition().hasPacket("request_chunk_radius")
+    ) {
+        return true;
+    }
+
     std::vector<std::vector<uint8_t>> packets;
     packets.push_back(codec.encodeFullPacketByName("play_status", { 0x00 }));
     packets.push_back(codec.encodeFullPacketByName("resource_pack_client_response", { 0x03, 0x00 }));
@@ -177,6 +185,44 @@ bool checkProtoDefNativeHelpers() {
     );
 
     expectBytes(
+        "u16-big-endian",
+        "\"u16\"",
+        bedrock::ProtoDefValue::uinteger(0x1234),
+        {0x12, 0x34}
+    );
+
+    expectBytes(
+        "lu16-little-endian",
+        "\"lu16\"",
+        bedrock::ProtoDefValue::uinteger(0x1234),
+        {0x34, 0x12}
+    );
+
+    expectBytes(
+        "f32-big-endian",
+        "\"f32\"",
+        bedrock::ProtoDefValue::floating(1.0),
+        {0x3f, 0x80, 0x00, 0x00}
+    );
+
+    expectBytes(
+        "lf32-little-endian",
+        "\"lf32\"",
+        bedrock::ProtoDefValue::floating(1.0),
+        {0x00, 0x00, 0x80, 0x3f}
+    );
+
+    expectBytes(
+        "bitfield",
+        "[\"bitfield\",[{\"name\":\"type\",\"size\":3,\"signed\":false},{\"name\":\"key\",\"size\":5,\"signed\":false}]]",
+        object({
+            {"type", bedrock::ProtoDefValue::uinteger(5)},
+            {"key", bedrock::ProtoDefValue::uinteger(17)}
+        }),
+        {0xb1}
+    );
+
+    expectBytes(
         "ipAddress",
         "\"ipAddress\"",
         bedrock::ProtoDefValue::string("127.0.0.1"),
@@ -241,10 +287,16 @@ bool checkSchemaEncode(
 bool checkSchemaEncodes(const std::string& version) {
     bool ok = true;
 
-    ok = checkSchemaEncode(version, "request_chunk_radius", object({
-        {"chunk_radius", bedrock::ProtoDefValue::integer(20)},
-        {"max_radius", bedrock::ProtoDefValue::uinteger(0)}
-    })) && ok;
+    if (versionAtLeast(version, "1.16.0")) {
+        ok = checkSchemaEncode(version, "request_chunk_radius", object({
+            {"chunk_radius", bedrock::ProtoDefValue::integer(20)},
+            {"max_radius", bedrock::ProtoDefValue::uinteger(0)}
+        })) && ok;
+    } else {
+        ok = checkSchemaEncode(version, "request_chunk_radius", object({
+            {"chunkRadius", bedrock::ProtoDefValue::integer(20)}
+        })) && ok;
+    }
 
     ok = checkSchemaEncode(version, "client_cache_status", object({
         {"enabled", bedrock::ProtoDefValue::boolean(false)}
@@ -259,14 +311,27 @@ bool checkSchemaEncodes(const std::string& version) {
         {"resourcepackids", array()}
     })) && ok;
 
-    auto textPacket = object({
-        {"type", bedrock::ProtoDefValue::string("raw")},
-        {"needs_translation", bedrock::ProtoDefValue::boolean(false)},
-        {"message", bedrock::ProtoDefValue::string("hello from schema encoder")},
-        {"xuid", bedrock::ProtoDefValue::string("")},
-        {"platform_chat_id", bedrock::ProtoDefValue::string("")},
-        {"filtered_message", bedrock::ProtoDefValue::string("")}
-    });
+    ok = checkSchemaEncode(version, "network_settings", object({
+        {"compression_threshold", bedrock::ProtoDefValue::uinteger(256)},
+        {"compression_algorithm", bedrock::ProtoDefValue::string("deflate")},
+        {"client_throttle", bedrock::ProtoDefValue::boolean(false)},
+        {"client_throttle_threshold", bedrock::ProtoDefValue::uinteger(0)},
+        {"client_throttle_scalar", bedrock::ProtoDefValue::floating(0.0)}
+    })) && ok;
+
+    auto textPacket = versionAtLeast(version, "1.16.0")
+        ? object({
+            {"type", bedrock::ProtoDefValue::string("raw")},
+            {"needs_translation", bedrock::ProtoDefValue::boolean(false)},
+            {"message", bedrock::ProtoDefValue::string("hello from schema encoder")},
+            {"xuid", bedrock::ProtoDefValue::string("")},
+            {"platform_chat_id", bedrock::ProtoDefValue::string("")},
+            {"filtered_message", bedrock::ProtoDefValue::string("")}
+        })
+        : object({
+            {"type", bedrock::ProtoDefValue::integer(0)},
+            {"message", bedrock::ProtoDefValue::string("hello from schema encoder")}
+        });
     if (versionAtLeast(version, "1.21.130")) {
         textPacket.objectValue["category"] = bedrock::ProtoDefValue::string("message_only");
         textPacket.objectValue["raw"] = bedrock::ProtoDefValue::string("hello from schema encoder");
@@ -279,21 +344,33 @@ bool checkSchemaEncodes(const std::string& version) {
     }
     ok = checkSchemaEncode(version, "text", textPacket) && ok;
 
-    auto movePlayer = object({
-        {"runtime_id", bedrock::ProtoDefValue::uinteger(1)},
-        {"position", object({
+    auto movePlayer = versionAtLeast(version, "1.16.0")
+        ? object({
+            {"runtime_id", bedrock::ProtoDefValue::uinteger(1)},
+            {"position", object({
+                {"x", bedrock::ProtoDefValue::floating(0.0)},
+                {"y", bedrock::ProtoDefValue::floating(64.0)},
+                {"z", bedrock::ProtoDefValue::floating(0.0)}
+            })},
+            {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+            {"yaw", bedrock::ProtoDefValue::floating(0.0)},
+            {"head_yaw", bedrock::ProtoDefValue::floating(0.0)},
+            {"mode", bedrock::ProtoDefValue::string("normal")},
+            {"on_ground", bedrock::ProtoDefValue::boolean(true)},
+            {"ridden_runtime_id", bedrock::ProtoDefValue::uinteger(0)},
+            {"tick", bedrock::ProtoDefValue::uinteger(1)}
+        })
+        : object({
+            {"entityId", bedrock::ProtoDefValue::integer(1)},
             {"x", bedrock::ProtoDefValue::floating(0.0)},
             {"y", bedrock::ProtoDefValue::floating(64.0)},
-            {"z", bedrock::ProtoDefValue::floating(0.0)}
-        })},
-        {"pitch", bedrock::ProtoDefValue::floating(0.0)},
-        {"yaw", bedrock::ProtoDefValue::floating(0.0)},
-        {"head_yaw", bedrock::ProtoDefValue::floating(0.0)},
-        {"mode", bedrock::ProtoDefValue::string("normal")},
-        {"on_ground", bedrock::ProtoDefValue::boolean(true)},
-        {"ridden_runtime_id", bedrock::ProtoDefValue::uinteger(0)},
-        {"tick", bedrock::ProtoDefValue::uinteger(1)}
-    });
+            {"z", bedrock::ProtoDefValue::floating(0.0)},
+            {"yaw", bedrock::ProtoDefValue::floating(0.0)},
+            {"headYaw", bedrock::ProtoDefValue::floating(0.0)},
+            {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+            {"mode", bedrock::ProtoDefValue::integer(0)},
+            {"onGround", bedrock::ProtoDefValue::integer(1)}
+        });
     if (versionEquals(version, "1.26.10")) {
         movePlayer.objectValue["mode"] = bedrock::ProtoDefValue::uinteger(0);
     }
@@ -317,16 +394,46 @@ bool checkSchemaEncodes(const std::string& version) {
         {"raw_move_vector", vec2f(0.0, 0.0)}
     })) && ok;
 
-    ok = checkSchemaEncode(version, "move_entity", object({
-        {"runtime_entity_id", bedrock::ProtoDefValue::uinteger(1)},
-        {"flags", bedrock::ProtoDefValue::uinteger(0)},
-        {"position", vec3f(0.0, 64.0, 0.0)},
-        {"rotation", object({
-            {"yaw", bedrock::ProtoDefValue::floating(90.0)},
-            {"pitch", bedrock::ProtoDefValue::floating(0.0)},
-            {"head_yaw", bedrock::ProtoDefValue::floating(90.0)}
-        })}
-    })) && ok;
+    if (versionAtLeast(version, "1.16.0")) {
+        ok = checkSchemaEncode(version, "move_entity", object({
+            {"runtime_entity_id", bedrock::ProtoDefValue::uinteger(1)},
+            {"flags", bedrock::ProtoDefValue::uinteger(0)},
+            {"position", vec3f(0.0, 64.0, 0.0)},
+            {"rotation", object({
+                {"yaw", bedrock::ProtoDefValue::floating(90.0)},
+                {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+                {"head_yaw", bedrock::ProtoDefValue::floating(90.0)}
+            })}
+        })) && ok;
+    } else {
+        ok = checkSchemaEncode(version, "move_entity", object({
+            {"entities", array({
+                object({
+                    {"eid", bedrock::ProtoDefValue::integer(1)},
+                    {"x", bedrock::ProtoDefValue::floating(0.0)},
+                    {"y", bedrock::ProtoDefValue::floating(64.0)},
+                    {"z", bedrock::ProtoDefValue::floating(0.0)},
+                    {"yaw", bedrock::ProtoDefValue::floating(90.0)},
+                    {"headYaw", bedrock::ProtoDefValue::floating(90.0)},
+                    {"pitch", bedrock::ProtoDefValue::floating(0.0)}
+                })
+            })}
+        })) && ok;
+    }
+
+    if (!versionAtLeast(version, "1.16.0")) {
+        auto setEntityData = object({
+            {versionEquals(version, "0.14") ? "entityId" : "entity_id", bedrock::ProtoDefValue::integer(1)},
+            {"metadata", array({
+                object({
+                    {"type", bedrock::ProtoDefValue::integer(4)},
+                    {"key", bedrock::ProtoDefValue::integer(3)},
+                    {"value", bedrock::ProtoDefValue::string("meta")}
+                })
+            })}
+        });
+        ok = checkSchemaEncode(version, "set_entity_data", setEntityData) && ok;
+    }
 
     return ok;
 }
@@ -350,10 +457,6 @@ int main() {
     }
 
     for (const auto& version : bedrock::ProtocolDefinition::versions()) {
-        if (!versionAtLeast(version, "1.20.0")) {
-            continue;
-        }
-
         ++checkedVersions;
         bool ok = true;
 

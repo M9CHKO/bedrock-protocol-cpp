@@ -30,6 +30,11 @@ public:
         data_.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
     }
 
+    void u16be(uint16_t v) {
+        data_.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
+        data_.push_back(static_cast<uint8_t>(v & 0xff));
+    }
+
     void u32le(uint32_t v) {
         data_.push_back(static_cast<uint8_t>(v & 0xff));
         data_.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
@@ -37,8 +42,21 @@ public:
         data_.push_back(static_cast<uint8_t>((v >> 24) & 0xff));
     }
 
+    void u32be(uint32_t v) {
+        data_.push_back(static_cast<uint8_t>((v >> 24) & 0xff));
+        data_.push_back(static_cast<uint8_t>((v >> 16) & 0xff));
+        data_.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
+        data_.push_back(static_cast<uint8_t>(v & 0xff));
+    }
+
     void u64le(uint64_t v) {
         for (int i = 0; i < 8; ++i) {
+            data_.push_back(static_cast<uint8_t>((v >> (i * 8)) & 0xff));
+        }
+    }
+
+    void u64be(uint64_t v) {
+        for (int i = 7; i >= 0; --i) {
             data_.push_back(static_cast<uint8_t>((v >> (i * 8)) & 0xff));
         }
     }
@@ -93,11 +111,25 @@ public:
         u32le(raw);
     }
 
+    void f32be(float value) {
+        static_assert(sizeof(float) == 4, "float must be 4 bytes");
+        uint32_t raw = 0;
+        std::memcpy(&raw, &value, 4);
+        u32be(raw);
+    }
+
     void f64le(double value) {
         static_assert(sizeof(double) == 8, "double must be 8 bytes");
         uint64_t raw = 0;
         std::memcpy(&raw, &value, 8);
         u64le(raw);
+    }
+
+    void f64be(double value) {
+        static_assert(sizeof(double) == 8, "double must be 8 bytes");
+        uint64_t raw = 0;
+        std::memcpy(&raw, &value, 8);
+        u64be(raw);
     }
 
     void string(const std::string& s) {

@@ -100,6 +100,16 @@ public:
             return;
         }
 
+        if (type.rfind("[\"bitfield\"", 0) == 0) {
+            decodeBitfield(type, reader, path, out, context);
+            return;
+        }
+
+        if (type.rfind("[\"entityMetadataItem\"", 0) == 0) {
+            decodeEntityMetadataItem(type, reader, path, out, context);
+            return;
+        }
+
                 if (type == "[\"enum_size_based_on_values_len\"]" || type == "enum_size_based_on_values_len") {
             auto valuesLen = context.get("values_len");
             if (valuesLen.empty()) {
@@ -310,9 +320,17 @@ private:
         int64_t length = 0;
         if (lengthType == "u8") {
             length = reader.u8();
-        } else if (lengthType == "u16" || lengthType == "lu16") {
+        } else if (lengthType == "u16") {
+            length = reader.u16be();
+        } else if (lengthType == "i16") {
+            length = static_cast<int16_t>(reader.u16be());
+        } else if (lengthType == "lu16") {
             length = reader.u16le();
-        } else if (lengthType == "u32" || lengthType == "lu32") {
+        } else if (lengthType == "u32") {
+            length = reader.u32be();
+        } else if (lengthType == "i32") {
+            length = reader.i32be();
+        } else if (lengthType == "lu32") {
             length = reader.u32le();
         } else if (lengthType == "varint" || lengthType == "varuint") {
             length = reader.varuint32();
@@ -368,9 +386,17 @@ private:
             count = std::stoll(raw);
         } else if (countType == "u8") {
             count = reader.u8();
-        } else if (countType == "u16" || countType == "lu16" || countType == "li16") {
+        } else if (countType == "u16") {
+            count = reader.u16be();
+        } else if (countType == "i16") {
+            count = static_cast<int16_t>(reader.u16be());
+        } else if (countType == "lu16" || countType == "li16") {
             count = reader.u16le();
-        } else if (countType == "u32" || countType == "lu32") {
+        } else if (countType == "u32") {
+            count = reader.u32be();
+        } else if (countType == "i32") {
+            count = reader.i32be();
+        } else if (countType == "lu32") {
             count = reader.u32le();
         } else if (countType == "varint" || countType == "varuint") {
             count = reader.varuint32();
@@ -433,11 +459,19 @@ private:
         int64_t count = 0;
         if (countType == "u8") {
             count = reader.u8();
-        } else if (countType == "u16" || countType == "lu16") {
+        } else if (countType == "u16") {
+            count = reader.u16be();
+        } else if (countType == "i16") {
+            count = static_cast<int16_t>(reader.u16be());
+        } else if (countType == "lu16") {
             count = reader.u16le();
         } else if (countType == "li16") {
             count = static_cast<int16_t>(reader.u16le());
-        } else if (countType == "u32" || countType == "lu32") {
+        } else if (countType == "u32") {
+            count = reader.u32be();
+        } else if (countType == "i32") {
+            count = reader.i32be();
+        } else if (countType == "lu32") {
             count = reader.u32le();
         } else if (countType == "li32") {
             count = reader.i32le();
@@ -588,11 +622,21 @@ private:
             } else {
                 numeric = std::to_string(v);
             }
-        } else if (*baseType == "u16" || *baseType == "lu16") {
+        } else if (*baseType == "u16") {
+            numeric = std::to_string(reader.u16be());
+        } else if (*baseType == "lu16") {
             numeric = std::to_string(reader.u16le());
-        } else if (*baseType == "u32" || *baseType == "lu32") {
+        } else if (*baseType == "i16") {
+            numeric = std::to_string(static_cast<int16_t>(reader.u16be()));
+        } else if (*baseType == "li16") {
+            numeric = std::to_string(static_cast<int16_t>(reader.u16le()));
+        } else if (*baseType == "u32") {
+            numeric = std::to_string(reader.u32be());
+        } else if (*baseType == "lu32") {
             numeric = std::to_string(reader.u32le());
-        } else if (*baseType == "i32" || *baseType == "li32") {
+        } else if (*baseType == "i32") {
+            numeric = std::to_string(reader.i32be());
+        } else if (*baseType == "li32") {
             numeric = std::to_string(reader.i32le());
         } else if (*baseType == "varint" || *baseType == "varuint") {
             numeric = std::to_string(reader.varuint32());
@@ -674,13 +718,21 @@ private:
                 } else {
                     count = reader.u8();
                 }
-            } else if (countType == "u16" || countType == "lu16" || countType == "li16") {
+            } else if (countType == "u16") {
+                count = reader.u16be();
+            } else if (countType == "i16") {
+                count = static_cast<int16_t>(reader.u16be());
+            } else if (countType == "lu16" || countType == "li16") {
                 count = reader.u16le();
             } else if (countType == "varint" || countType == "varuint") {
                 count = reader.varuint32();
             } else if (countType == "li32") {
                 count = reader.i32le();
-            } else if (countType == "u32" || countType == "lu32") {
+            } else if (countType == "u32") {
+                count = reader.u32be();
+            } else if (countType == "i32") {
+                count = reader.i32be();
+            } else if (countType == "lu32") {
                 count = reader.u32le();
             } else {
                 throw std::runtime_error("array unsupported countType: " + countType);
@@ -831,8 +883,11 @@ private:
 
         unsigned __int128 value = 0;
         if (baseType == "u8") value = reader.u8();
-        else if (baseType == "u16" || baseType == "lu16" || baseType == "li16") value = reader.u16le();
-        else if (baseType == "u32" || baseType == "lu32" || baseType == "li32") value = reader.u32le();
+        else if (baseType == "u16") value = reader.u16be();
+        else if (baseType == "lu16" || baseType == "li16") value = reader.u16le();
+        else if (baseType == "u32") value = reader.u32be();
+        else if (baseType == "lu32" || baseType == "li32") value = reader.u32le();
+        else if (baseType == "u64") value = reader.readU64BE();
         else if (baseType == "lu64" || baseType == "li64") value = reader.readU64LE();
         else if (baseType == "varint128") value = readVarUInt128(reader);
         else value = reader.varuint32();
@@ -846,6 +901,129 @@ private:
         for (const auto& [name, bit] : readBitflagValues(bitflagsJson)) {
             context.set(path.empty() ? name : path + "." + name, (value & bit) != 0 ? "true" : "false");
         }
+    }
+
+    struct BitfieldPart {
+        std::string name;
+        int size = 0;
+        bool signedValue = false;
+    };
+
+    void decodeBitfield(
+        const std::string& bitfieldJson,
+        ProtoDefReader& reader,
+        const std::string& path,
+        std::vector<ProtoDefField>& out,
+        ProtoDefContext& context
+    ) const {
+        auto parts = readBitfieldParts(bitfieldJson);
+
+        std::optional<uint8_t> currentByte;
+        int remainingBits = 0;
+
+        for (const auto& part : parts) {
+            const std::size_t start = reader.offset();
+            int currentSize = part.size;
+            int64_t value = 0;
+
+            if (currentSize <= 0 || currentSize > 31) {
+                throw std::runtime_error("bitfield unsupported field size: " + std::to_string(currentSize));
+            }
+
+            while (currentSize > 0) {
+                if (remainingBits == 0) {
+                    currentByte = reader.u8();
+                    remainingBits = 8;
+                }
+
+                const int bitsToRead = std::min(currentSize, remainingBits);
+                const uint8_t mask = static_cast<uint8_t>((1u << remainingBits) - 1u);
+                value = (value << bitsToRead) |
+                    (((*currentByte & mask) >> (remainingBits - bitsToRead)) & ((1u << bitsToRead) - 1u));
+                remainingBits -= bitsToRead;
+                currentSize -= bitsToRead;
+            }
+
+            if (part.signedValue && value >= (1LL << (part.size - 1))) {
+                value -= (1LL << part.size);
+            }
+
+            ProtoDefField field;
+            field.path = path.empty() ? part.name : path + "." + part.name;
+            field.type = "bitfield";
+            field.value = std::to_string(value);
+            field.offset = start;
+            field.size = reader.offset() - start;
+            out.push_back(field);
+            context.set(field.path, field.value);
+        }
+    }
+
+    void decodeEntityMetadataItem(
+        const std::string& metadataItemJson,
+        ProtoDefReader& reader,
+        const std::string& path,
+        std::vector<ProtoDefField>& out,
+        ProtoDefContext& context
+    ) const {
+        auto compareTo = readJsonStringField(metadataItemJson, "compareTo").value_or("type");
+        std::string comparePath = resolveComparePath(path, compareTo);
+        std::string compareValue = context.get(comparePath);
+        if (compareValue.empty()) compareValue = context.get(compareTo);
+        if (compareValue.empty() && !path.empty()) compareValue = context.get(path + "." + compareTo);
+        if (compareValue.empty()) {
+            throw std::runtime_error("entityMetadataItem missing compare field: " + compareTo);
+        }
+
+        auto switchJson = resolver_ ? resolver_("entityMetadataItem") : std::nullopt;
+        if (!switchJson.has_value()) {
+            switchJson = bedrock::generatedProtocolTypeJson("entityMetadataItem");
+        }
+        if (!switchJson.has_value()) {
+            throw std::runtime_error("entityMetadataItem schema not found");
+        }
+
+        auto branch = findSwitchBranchType(*switchJson, compareValue);
+        if (!branch.has_value()) {
+            branch = readJsonValueField(*switchJson, "default");
+        }
+        if (!branch.has_value()) {
+            throw std::runtime_error("entityMetadataItem no branch for: " + compareValue);
+        }
+
+        decode(*branch, reader, path, out, context);
+    }
+
+    static std::vector<BitfieldPart> readBitfieldParts(const std::string& bitfieldJson) {
+        auto fields = readSecondElement(bitfieldJson);
+        if (!fields.has_value()) {
+            throw std::runtime_error("bitfield fields array not found");
+        }
+
+        std::vector<BitfieldPart> out;
+        std::size_t pos = 0;
+        while (true) {
+            auto objStart = fields->find('{', pos);
+            if (objStart == std::string::npos) break;
+
+            auto objEnd = findMatching(*fields, objStart, '{', '}');
+            if (objEnd == std::string::npos) {
+                throw std::runtime_error("bitfield field object not closed");
+            }
+
+            std::string fieldObj = fields->substr(objStart, objEnd - objStart + 1);
+            auto name = readJsonStringField(fieldObj, "name");
+            auto size = readJsonIntegerField(fieldObj, "size");
+            auto signedValue = readJsonBoolField(fieldObj, "signed").value_or(false);
+            if (!name.has_value() || !size.has_value()) {
+                throw std::runtime_error("bitfield field missing name or size");
+            }
+
+            out.push_back(BitfieldPart{*name, static_cast<int>(*size), signedValue});
+            pos = objEnd + 1;
+        }
+
+        return out;
     }
 
     void decodeTypeName(
@@ -868,6 +1046,17 @@ private:
             field.value = reader.string();
         } else if (typeName == "ShortString") {
             field.value = readShortString(reader);
+        } else if (typeName == "lstring") {
+            int32_t count = reader.i32le();
+            if (count < 0) {
+                throw std::runtime_error("lstring negative length");
+            }
+            std::string value;
+            value.reserve(static_cast<std::size_t>(count));
+            for (int32_t i = 0; i < count; ++i) {
+                value.push_back(static_cast<char>(reader.u8()));
+            }
+            field.value = value;
         } else if (typeName == "bool") {
             field.value = reader.boolean() ? "true" : "false";
         } else if (typeName == "uuid") {
@@ -908,15 +1097,29 @@ private:
             }
         } else if (typeName == "i8") {
             field.value = std::to_string(static_cast<int8_t>(reader.u8()));
-        } else if (typeName == "u16" || typeName == "lu16" || typeName == "li16") {
+        } else if (typeName == "u16") {
+            field.value = std::to_string(reader.u16be());
+        } else if (typeName == "lu16") {
             field.value = std::to_string(reader.u16le());
-        } else if (typeName == "u32" || typeName == "lu32") {
+        } else if (typeName == "i16") {
+            field.value = std::to_string(static_cast<int16_t>(reader.u16be()));
+        } else if (typeName == "li16") {
+            field.value = std::to_string(static_cast<int16_t>(reader.u16le()));
+        } else if (typeName == "u32") {
+            field.value = std::to_string(reader.u32be());
+        } else if (typeName == "lu32") {
             field.value = std::to_string(reader.u32le());
-        } else if (typeName == "i32" || typeName == "li32") {
+        } else if (typeName == "i32") {
+            field.value = std::to_string(reader.i32be());
+        } else if (typeName == "li32") {
             field.value = std::to_string(reader.i32le());
-        } else if (typeName == "u64" || typeName == "lu64") {
+        } else if (typeName == "u64") {
+            field.value = std::to_string(reader.u64be());
+        } else if (typeName == "lu64") {
             field.value = std::to_string(reader.u64le());
-        } else if (typeName == "i64" || typeName == "li64") {
+        } else if (typeName == "i64") {
+            field.value = std::to_string(reader.i64be());
+        } else if (typeName == "li64") {
             field.value = std::to_string(reader.i64le());
         } else if (
             typeName == "varuint64" ||
@@ -947,9 +1150,13 @@ private:
             field.value = readVarUInt128String(reader);
         } else if (typeName == "enum_size_based_on_values_len") {
             field.value = enumSizeBasedOnValuesLen(context);
-        } else if (typeName == "f32" || typeName == "lf32") {
+        } else if (typeName == "f32") {
+            field.value = std::to_string(reader.readF32BE());
+        } else if (typeName == "lf32") {
             field.value = std::to_string(reader.readF32LE());
-        } else if (typeName == "f64" || typeName == "lf64") {
+        } else if (typeName == "f64") {
+            field.value = std::to_string(reader.readF64BE());
+        } else if (typeName == "lf64") {
             field.value = std::to_string(reader.readF64LE());
         } else if (typeName == "vec3i") {
             field.value =

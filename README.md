@@ -162,7 +162,7 @@ Examples included in this repository:
 Current focus is matching the JavaScript `bedrock-protocol` model rather than adding one-off packet shortcuts.
 
 - Keep packet read/write schema-driven through bundled `minecraft-data` and generated protocol tables.
-- Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes`. Current C++ handlers cover the common Bedrock schema path plus `byterot`, `restBuffer`, `MapInfo`, `nbtLoop`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, fixed `buffer`/`array` counts, `count`, and `varint128` bitflags.
+- Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes`. Current C++ handlers cover the common Bedrock schema path plus JavaScript `protodef` numeric endian rules, `bitfield`, `byterot`, `restBuffer`, `MapInfo`, `nbtLoop`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, `entityMetadataItem`, `lstring`, fixed `buffer`/`array` counts, `count`, and `varint128` bitflags.
 - Add typed convenience builders on top of schema objects without replacing schema objects.
 - Add more live integration tests for online/offline servers and version-specific packet shapes.
 - Add higher-level bot helpers for chat, movement, inventory, entities, chunks, and resource packs.

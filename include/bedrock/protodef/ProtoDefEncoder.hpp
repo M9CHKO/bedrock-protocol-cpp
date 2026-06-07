@@ -97,6 +97,16 @@ public:
             return;
         }
 
+        if (startsWith(type, "[\"bitfield\"")) {
+            encodeBitfield(type, value, writer);
+            return;
+        }
+
+        if (startsWith(type, "[\"entityMetadataItem\"")) {
+            encodeEntityMetadataItem(type, value, writer);
+            return;
+        }
+
         throw std::runtime_error("ProtoDefEncoder unsupported type json: " + type);
     }
 
@@ -312,12 +322,32 @@ private:
             return;
         }
 
-        if (countType == "u16" || countType == "lu16" || countType == "li16") {
+        if (countType == "u16") {
+            writer.u16be(static_cast<uint16_t>(count));
+            return;
+        }
+
+        if (countType == "i16") {
+            writer.u16be(static_cast<uint16_t>(count));
+            return;
+        }
+
+        if (countType == "lu16" || countType == "li16") {
             writer.u16le(static_cast<uint16_t>(count));
             return;
         }
 
-        if (countType == "u32" || countType == "lu32" || countType == "li32") {
+        if (countType == "u32") {
+            writer.u32be(static_cast<uint32_t>(count));
+            return;
+        }
+
+        if (countType == "i32") {
+            writer.u32be(static_cast<uint32_t>(count));
+            return;
+        }
+
+        if (countType == "lu32" || countType == "li32") {
             writer.u32le(static_cast<uint32_t>(count));
             return;
         }
@@ -469,7 +499,10 @@ private:
 
                 std::string normalizedType = trim(*type);
 
-                if (startsWith(normalizedType, "[\"switch\"")) {
+                if (
+                    startsWith(normalizedType, "[\"switch\"") ||
+                    startsWith(normalizedType, "[\"entityMetadataItem\"")
+                ) {
                     ProtoDefValue switchContext = value;
 
                     if (const ProtoDefValue* child = value.get(*name)) {
@@ -507,6 +540,16 @@ private:
 
         if (typeName == "ShortString") {
             writer.shortString(asString(value));
+            return;
+        }
+
+        if (typeName == "lstring") {
+            const std::string& text = asString(value);
+            writer.u32le(static_cast<uint32_t>(text.size()));
+            writer.bytes(
+                reinterpret_cast<const uint8_t*>(text.data()),
+                text.size()
+            );
             return;
         }
 
@@ -574,13 +617,38 @@ private:
             return;
         }
 
-        if (typeName == "u16" || typeName == "lu16" || typeName == "li16") {
+        if (typeName == "u16") {
+            writer.u16be(static_cast<uint16_t>(asUInt(value)));
+            return;
+        }
+
+        if (typeName == "lu16") {
             writer.u16le(static_cast<uint16_t>(asUInt(value)));
             return;
         }
 
-        if (typeName == "u32" || typeName == "lu32") {
+        if (typeName == "i16") {
+            writer.u16be(static_cast<uint16_t>(asInt(value)));
+            return;
+        }
+
+        if (typeName == "li16") {
+            writer.u16le(static_cast<uint16_t>(asInt(value)));
+            return;
+        }
+
+        if (typeName == "u32") {
+            writer.u32be(static_cast<uint32_t>(asUInt(value)));
+            return;
+        }
+
+        if (typeName == "lu32") {
             writer.u32le(static_cast<uint32_t>(asUInt(value)));
+            return;
+        }
+
+        if (typeName == "u64") {
+            writer.u64be(static_cast<uint64_t>(asUInt(value)));
             return;
         }
 
@@ -589,18 +657,18 @@ private:
             return;
         }
 
-        if (typeName == "u64") {
-            writer.u64le(static_cast<uint64_t>(asUInt(value)));
+        if (typeName == "i32") {
+            writer.u32be(static_cast<uint32_t>(asInt(value)));
             return;
         }
 
-        if (typeName == "i32" || typeName == "li32") {
+        if (typeName == "li32") {
             writer.u32le(static_cast<uint32_t>(asInt(value)));
             return;
         }
 
         if (typeName == "i64") {
-            writer.u64le(static_cast<uint64_t>(asInt(value)));
+            writer.u64be(static_cast<uint64_t>(asInt(value)));
             return;
         }
 
@@ -641,12 +709,22 @@ private:
             return;
         }
 
-        if (typeName == "lf32" || typeName == "f32") {
+        if (typeName == "f32") {
+            writer.f32be(static_cast<float>(asDouble(value)));
+            return;
+        }
+
+        if (typeName == "lf32") {
             writer.f32le(static_cast<float>(asDouble(value)));
             return;
         }
 
-        if (typeName == "lf64" || typeName == "f64") {
+        if (typeName == "f64") {
+            writer.f64be(static_cast<double>(asDouble(value)));
+            return;
+        }
+
+        if (typeName == "lf64") {
             writer.f64le(static_cast<double>(asDouble(value)));
             return;
         }
@@ -1053,6 +1131,138 @@ private:
         }
 
         encodeTypeName(baseType, ProtoDefValue::uinteger(static_cast<uint64_t>(mask)), writer);
+    }
+
+    struct BitfieldPart {
+        std::string name;
+        int size = 0;
+        bool signedValue = false;
+    };
+
+    void encodeBitfield(
+        const std::string& bitfieldJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        if (value.kind != ProtoDefValue::Kind::Object) {
+            throw std::runtime_error("bitfield encode expects object");
+        }
+
+        auto parts = readBitfieldParts(bitfieldJson);
+        uint32_t toWrite = 0;
+        int bits = 0;
+
+        for (const auto& part : parts) {
+            const ProtoDefValue* field = value.get(part.name);
+            if (!field) {
+                throw std::runtime_error("bitfield missing field: " + part.name);
+            }
+
+            int64_t raw = asInt(*field);
+            if (part.size <= 0 || part.size > 31) {
+                throw std::runtime_error("bitfield unsupported field size: " + std::to_string(part.size));
+            }
+
+            const int64_t minValue = part.signedValue ? -(1LL << (part.size - 1)) : 0;
+            const int64_t maxValue = part.signedValue ? ((1LL << (part.size - 1)) - 1) : ((1LL << part.size) - 1);
+            if (raw < minValue || raw > maxValue) {
+                throw std::runtime_error("bitfield field out of range: " + part.name);
+            }
+
+            uint32_t val = static_cast<uint32_t>(raw);
+            if (part.signedValue && raw < 0) {
+                val = static_cast<uint32_t>((1LL << part.size) + raw);
+            }
+
+            int size = part.size;
+            while (size > 0) {
+                int writeBits = std::min(8 - bits, size);
+                uint32_t mask = (1u << writeBits) - 1u;
+                toWrite = (toWrite << writeBits) | ((val >> (size - writeBits)) & mask);
+                size -= writeBits;
+                bits += writeBits;
+
+                if (bits == 8) {
+                    writer.u8(static_cast<uint8_t>(toWrite));
+                    bits = 0;
+                    toWrite = 0;
+                }
+            }
+        }
+
+        if (bits != 0) {
+            writer.u8(static_cast<uint8_t>(toWrite << (8 - bits)));
+        }
+    }
+
+    void encodeEntityMetadataItem(
+        const std::string& metadataItemJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        if (value.kind != ProtoDefValue::Kind::Object) {
+            throw std::runtime_error("entityMetadataItem encode expects object context");
+        }
+
+        auto compareTo = readJsonStringField(metadataItemJson, "compareTo").value_or("type");
+        auto compareValue = resolveCompareValue(value, compareTo);
+        if (!compareValue.has_value()) {
+            throw std::runtime_error("entityMetadataItem missing compare field: " + compareTo);
+        }
+
+        auto switchJson = resolver_ ? resolver_("entityMetadataItem") : std::nullopt;
+        if (!switchJson.has_value()) {
+            switchJson = bedrock::generatedProtocolTypeJson("entityMetadataItem");
+        }
+        if (!switchJson.has_value()) {
+            throw std::runtime_error("entityMetadataItem schema not found");
+        }
+
+        auto branch = findSwitchBranchType(*switchJson, *compareValue);
+        if (!branch.has_value()) {
+            branch = readJsonValueField(*switchJson, "default");
+        }
+        if (!branch.has_value()) {
+            throw std::runtime_error("entityMetadataItem no branch for: " + *compareValue);
+        }
+
+        if (const ProtoDefValue* directValue = value.get("$value")) {
+            encode(*branch, *directValue, writer);
+        } else {
+            encode(*branch, value, writer);
+        }
+    }
+
+    static std::vector<BitfieldPart> readBitfieldParts(const std::string& bitfieldJson) {
+        auto fields = readSecondElement(bitfieldJson);
+        if (!fields.has_value()) {
+            throw std::runtime_error("bitfield fields array not found");
+        }
+
+        std::vector<BitfieldPart> out;
+        std::size_t pos = 0;
+        while (true) {
+            auto objStart = fields->find('{', pos);
+            if (objStart == std::string::npos) break;
+
+            auto objEnd = findMatching(*fields, objStart, '{', '}');
+            if (objEnd == std::string::npos) {
+                throw std::runtime_error("bitfield field object not closed");
+            }
+
+            std::string fieldObj = fields->substr(objStart, objEnd - objStart + 1);
+            auto name = readJsonStringField(fieldObj, "name");
+            auto size = readJsonIntegerField(fieldObj, "size");
+            auto signedValue = readJsonBoolField(fieldObj, "signed").value_or(false);
+            if (!name.has_value() || !size.has_value()) {
+                throw std::runtime_error("bitfield field missing name or size");
+            }
+
+            out.push_back(BitfieldPart{*name, static_cast<int>(*size), signedValue});
+            pos = objEnd + 1;
+        }
+
+        return out;
     }
 
     static std::unordered_map<std::string, unsigned __int128> readBitflagValues128(const std::string& bitflagsJson) {

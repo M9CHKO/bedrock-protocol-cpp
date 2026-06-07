@@ -78,7 +78,7 @@ Use this checklist when continuing the port from `node_modules`.
 
 - Keep packet serialization schema-driven: packet name plus params object, like `client.write(name, params)` in JavaScript.
 - Port missing `protodef` datatypes from `node_modules/protodef/src/datatypes` and `node_modules/bedrock-protocol/src/datatypes`.
-- Add each ported datatype to `protocol-roundtrip`. Current coverage includes fixed `buffer`/`array` counts, `count`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, `byterot`, and `varint128` bitflags through `player_auth_input`.
+- Add each ported datatype to `protocol-roundtrip`. Current coverage runs across all bundled protocol versions and includes JavaScript numeric endian rules, `bitfield`, fixed `buffer`/`array` counts, `count`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, `entityMetadataItem`, `lstring`, `byterot`, and `varint128` bitflags through `player_auth_input`.
 - Prefer native datatype handlers over packet-specific shortcuts.
 - Add a protocol-roundtrip case when a new datatype is ported.
 - Add live tests for handshake/login/resource-pack flow before changing connection code.

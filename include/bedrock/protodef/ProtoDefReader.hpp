@@ -38,8 +38,22 @@ public:
         return cursor_.u16le();
     }
 
+    uint16_t u16be() {
+        uint16_t hi = u8();
+        uint16_t lo = u8();
+        return static_cast<uint16_t>((hi << 8) | lo);
+    }
+
     uint32_t u32le() {
         return cursor_.u32le();
+    }
+
+    uint32_t u32be() {
+        uint32_t b0 = u8();
+        uint32_t b1 = u8();
+        uint32_t b2 = u8();
+        uint32_t b3 = u8();
+        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
     }
 
     uint64_t u64le() {
@@ -50,16 +64,39 @@ public:
         return v;
     }
 
+    uint64_t u64be() {
+        uint64_t v = 0;
+        for (int i = 0; i < 8; ++i) {
+            v = (v << 8) | static_cast<uint64_t>(u8());
+        }
+        return v;
+    }
+
     int64_t i64le() {
         return static_cast<int64_t>(u64le());
+    }
+
+    int64_t i64be() {
+        return static_cast<int64_t>(u64be());
     }
 
     uint64_t readU64LE() {
         return u64le();
     }
 
+    uint64_t readU64BE() {
+        return u64be();
+    }
+
     float readF32LE() {
         uint32_t raw = u32le();
+        float v = 0.0f;
+        std::memcpy(&v, &raw, sizeof(v));
+        return v;
+    }
+
+    float readF32BE() {
+        uint32_t raw = u32be();
         float v = 0.0f;
         std::memcpy(&v, &raw, sizeof(v));
         return v;
@@ -72,8 +109,19 @@ public:
         return v;
     }
 
+    double readF64BE() {
+        uint64_t raw = u64be();
+        double v = 0.0;
+        std::memcpy(&v, &raw, sizeof(v));
+        return v;
+    }
+
     int32_t i32le() {
         return cursor_.i32le();
+    }
+
+    int32_t i32be() {
+        return static_cast<int32_t>(u32be());
     }
 
     uint32_t varuint32() {

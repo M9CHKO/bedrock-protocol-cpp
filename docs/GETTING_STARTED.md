@@ -167,14 +167,12 @@ cmake --build build -j"$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)"
 ### Windows
 
 ```powershell
-$env:BEDROCK_PROTOCOL_BIN_DIR = "C:\path\to\workspace\bedrock-protocol-cpp\install\bin"
 .\build\my_bedrock_bot.exe
 ```
 
 ### Linux / Termux
 
 ```bash
-export BEDROCK_PROTOCOL_BIN_DIR=/path/to/workspace/bedrock-protocol-cpp/install/bin
 ./build/my_bedrock_bot
 ```
 
@@ -192,14 +190,14 @@ Public online server:
 
 ```cpp
 .offline = false,
+.profile = "YourXboxProfileName",
+.interactiveAuth = true,
 ```
 
-Online mode uses Xbox Live authentication. Public servers usually reject offline/self-signed clients.
+Online mode uses Xbox Live authentication. If the profile cache is missing, the bot prints a Microsoft device-code login URL/code, waits for you to sign in, saves the hidden auth cache, and then generates a fresh login packet for the selected version/server. Public servers usually reject offline/self-signed clients.
 
 ## 8. Common Beginner Fixes
 
 If CMake cannot find the library, check `CMAKE_PREFIX_PATH`. It must point to `bedrock-protocol-cpp/install`.
-
-If the bot cannot find the runtime helper, set `BEDROCK_PROTOCOL_BIN_DIR` to `bedrock-protocol-cpp/install/bin`.
 
 If VS Code cannot find `<bedrock/bedrock.hpp>`, open the `bedrock-protocol-cpp` folder itself, not its parent folder, and run `CMake: Configure`.

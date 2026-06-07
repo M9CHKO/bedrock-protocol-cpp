@@ -37,16 +37,18 @@ int main() {
 - Minecraft Bedrock network handshake.
 - `NetworkSettingsRequest` / `NetworkSettings`.
 - Login packet generation with versioned `clientData`.
-- Xbox Live auth for online servers.
+- Xbox Live auth for online servers through profile cache and interactive device-code login.
 - Offline/self-signed auth for local offline servers.
 - Resource pack response flow.
 - Compression handling for old and new Bedrock protocol shapes.
 - Packet id/name decoding across bundled protocol versions.
 - Schema-based packet encoding and `client.write(packetName, bedrock::object({...}))` for packets in the bundled version registry.
 - Optional deep packet JSON decoding for debugging.
-- `bedrock-protocol`-style client creation and event handlers.
+- `bedrock-protocol`-style in-process client creation and event handlers.
 - Packet-level relay core with `clientbound` / `serverbound` events, `cancel()`, `replace()`, MCPE repacking, forced `client_cache_status`, and level chunk queueing before `start_game`.
 - Early `createServer` runtime: RakNet ping/open-connection listener, connected RakNet request handling, MCPE packet events, `request_network_settings -> network_settings`, login handshake JWT, encrypted `client_to_server_handshake`, and `join` event.
+- Test relay listener example (`relay-test-server`) that lets a Bedrock client join the C++ listener while an upstream C++ client connects to a real server.
+- Bedrock chunk/world foundation inspired by `prismarine-chunk`, including paletted subchunks, the 1.18 single-runtime-palette case, biome sections, no-cache `level_chunk`, cache blob status/miss handling, and a tracked `client.world()`.
 - CMake package install for separate bot projects.
 - Windows through MSYS2/MinGW, Linux, and Termux builds.
 
@@ -81,6 +83,7 @@ Detailed beginner instructions are here:
 - [Relay API](docs/RELAY.md)
 - [Supported Versions](docs/VERSIONS.md)
 - [Packet Documentation](docs/PACKETS.md)
+- [JavaScript Parity Roadmap](docs/PARITY_ROADMAP.md)
 - [Updating The Library](docs/MAINTENANCE.md)
 
 ## Install Layout
@@ -108,11 +111,12 @@ auto client = bedrock::createClient({
     .profile = "Notch",
     .version = "latest",
     .offline = false,
+    .interactiveAuth = true,
+    .clientCacheEnabled = false,
+    .trackWorld = true,
+    .chunkRadius = 20,
     .debug = bedrock::DebugMode::Events,
-    .decodePackets = false,
-    .packetDump = false,
-    .regenLogin = false,
-    .holdSeconds = 0
+    .decodePackets = true
 });
 ```
 
@@ -124,13 +128,17 @@ auto client = bedrock::createClient({
 | `profile` | empty | Xbox auth cache profile. Empty means `username`. |
 | `version` | `latest` | Bedrock version from the bundled version table. |
 | `offline` | `false` | Use self-signed auth instead of Xbox Live. |
+| `interactiveAuth` | `true` | If the Xbox cache is missing, show a device-code login prompt and save the profile cache. |
+| `xboxClientId` | empty | Optional OAuth client id override. Empty uses the common public Xbox client id used by Bedrock tooling. |
+| `authCacheRoot` | auto | Optional Xbox auth/key cache root. Empty uses the hidden default cache folder. |
+| `clientCacheEnabled` | `false` | Sends the client cache preference used by chunk cache flow. |
+| `trackWorld` | `true` | Decode supported `level_chunk` packets into `client.world()`. |
+| `chunkRadius` | `20` | Requested chunk radius during automatic start-game initialization. |
 | `debug` | `Off` | `Off`, `Events`, `Packets`, `Json`, or `Trace`. |
-| `decodePackets` | `false` | Decode packet fields into JSON-style event fields. |
+| `decodePackets` | `true` | Decode packet fields into JSON-style event fields. |
 | `packetDump` | `false` | Print extra packet dump output. |
-| `regenLogin` | `false` | Force login packet regeneration for the current run. |
-| `holdSeconds` | `0` | `0` keeps the client connected until the process exits. |
-| `executableDir` | auto | Directory containing installed runtime helpers. |
-| `runtimeExecutable` | auto | Direct path to the `bedrock` helper. |
+
+`bedrock::createClient()` is the normal in-process API. The old helper-process wrapper is still available as `bedrock::createExternalClient(...)` for compatibility with older local tests.
 
 Events:
 
@@ -160,6 +168,7 @@ Examples included in this repository:
 | `packet-event-bot` | Packet event logging and one outgoing schema packet. |
 | `medium-bot` | Medium bot example with packet handlers, chunk radius request, and movement packet writing. |
 | `relay-packet-bot` | Packet-level relay example with serverbound/clientbound hooks. |
+| `relay-test-server` | Runnable relay listener for joining from Minecraft and forwarding to an upstream server. |
 | `simple-server` | Minimal `createServer` listener with connect, packet, and join events. |
 
 ## Roadmap To JavaScript bedrock-protocol Parity
@@ -167,8 +176,9 @@ Examples included in this repository:
 Current focus is matching the JavaScript `bedrock-protocol` model rather than adding one-off packet shortcuts.
 
 - Keep packet read/write schema-driven through bundled `minecraft-data` and generated protocol tables.
-- Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes`. Current C++ handlers cover the common Bedrock schema path plus JavaScript `protodef` numeric endian rules, `bitfield`, `byterot`, `restBuffer`, `MapInfo`, `nbtLoop`, `ipAddress`, `endOfArray`, `entityMetadataLoop`, `entityMetadataItem`, `lstring`, fixed `buffer`/`array` counts, `count`, and `varint128` bitflags.
-- Keep relay behavior aligned with JavaScript `bedrock-protocol/src/relay.js`. The C++ server listener and encrypted join path now exist; the remaining large step is the full Player session/runtime and upstream client bridge so the library can expose a complete network proxy like JS `Relay`.
+- Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes` for every bundled version.
+- Keep relay behavior aligned with JavaScript `bedrock-protocol/src/relay.js`. The C++ server listener, upstream client, and test relay listener now exist; the remaining large step is the full Player session/runtime parity and live proxy hardening.
+- Continue porting `prismarine-chunk` / `prismarine-world` behavior: subchunk request packets, local/network persistence NBT, block entity NBT, blob hashing, and cache generation.
 - Add typed convenience builders on top of schema objects without replacing schema objects.
 - Add more live integration tests for online/offline servers and version-specific packet shapes.
 - Add higher-level bot helpers for chat, movement, inventory, entities, chunks, and resource packs.

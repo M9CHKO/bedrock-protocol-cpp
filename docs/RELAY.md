@@ -8,7 +8,7 @@ The C++ relay API follows the packet event model from:
 - `event.replace(packet)`: forward a changed packet instead.
 - `event.replace({packet1, packet2})`: forward several packets.
 
-This is currently a packet-level relay core plus an early C++ `createServer` runtime. The server runtime can listen for RakNet clients, answer ping/open-connection, handle connected RakNet request flow, emit MCPE packet events, answer `request_network_settings`, complete the login encryption handshake, and emit `join`. A full network proxy like JavaScript `new Relay(...)` still needs the remaining Player session/runtime work and the upstream client bridge.
+This is currently a packet-level relay core plus an early C++ `createServer` runtime and upstream `BedrockNetworkClient`. The server runtime can listen for RakNet clients, answer ping/open-connection, handle connected RakNet request flow, emit MCPE packet events, answer `request_network_settings`, complete the login encryption handshake, and emit `join`. The `relay-test-server` example wires the listener to an upstream client so a Bedrock client can join it for live testing.
 
 ## Basic Example
 
@@ -168,7 +168,7 @@ Windows PowerShell:
 .\scripts\build.ps1 -NoInstall
 ```
 
-Run:
+Run the packet-core example:
 
 ```bash
 ./build/relay-packet-bot
@@ -189,6 +189,31 @@ clientbound play_status
 forwarded clientbound packets=0
 ```
 
+Run the live relay listener:
+
+```bash
+./build/relay-test-server
+```
+
+Windows:
+
+```powershell
+.\build\relay-test-server.exe
+```
+
+Edit `examples/relay_test_server.cpp` before building to change:
+
+| Setting | Meaning |
+|---|---|
+| `version` | Bedrock version used by the downstream listener and upstream client. |
+| `listenHost` / `listenPort` | Address Minecraft connects to. |
+| `upstreamHost` / `upstreamPort` | Real server the C++ upstream client joins. |
+| `upstreamUsername` / `upstreamProfile` | Bot display/profile name. |
+| `upstreamOffline` | Use offline auth for local offline upstream servers. |
+| `interactiveAuth` | Show device-code login when the Xbox cache is missing. |
+
+Start `relay-test-server`, add the listener address in Minecraft, and join it. The terminal prints `[client -> upstream]` and `[upstream -> client]` packet names while forwarding supported traffic.
+
 ## Version Safety
 
 Relay tests run through every bundled protocol version in `protocol-roundtrip`. The tests skip packets that do not exist in a version and verify the behavior on versions where those packets are present.
@@ -208,8 +233,8 @@ Expected summary:
 To become a full JavaScript-style network relay, the library still needs:
 
 - Complete Player session state after `join`, including close/disconnect behavior, batching, compression transitions, and encrypted packet queues.
-- A runtime bridge that connects the downstream server listener to the existing upstream client.
+- More complete runtime bridge behavior for all login/resource-pack/start-game edge cases.
 - Login/resource-pack/session state mapping between downstream and upstream.
-- Live tests where a real Bedrock client joins the C++ proxy and the proxy joins an upstream server.
+- Live regression tests where a real Bedrock client joins the C++ proxy and the proxy joins an upstream server.
 
 The packet rewrite core is now in place, so the next work should build the server listener around this API instead of inventing a separate relay model.

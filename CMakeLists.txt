@@ -24,6 +24,8 @@ add_library(bedrock_protocol
     src/BedrockKeyExchange.cpp
     src/auth/BedrockAuthJwt.cpp
     src/auth/BedrockClientDataBuilder.cpp
+    src/auth/XboxLiveAuth.cpp
+    src/client/BedrockNetworkClient.cpp
     src/client/RakNetClient.cpp
     src/events/BedrockPacketEventAdapter.cpp
     src/generated/GeneratedProtocolTables.cpp
@@ -39,6 +41,7 @@ add_library(bedrock_protocol
     src/server/RakNetServer.cpp
     src/util/BinaryStream.cpp
     src/util/VarInt.cpp
+    src/world/BedrockChunk.cpp
 )
 add_library(BedrockProtocol::bedrock_protocol ALIAS bedrock_protocol)
 add_library(Bedrock::bedrock ALIAS bedrock_protocol)
@@ -82,6 +85,12 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
     add_executable(raknet-client-smoke tools/raknet_client_smoke.cpp)
     target_link_libraries(raknet-client-smoke PRIVATE BedrockProtocol::bedrock_protocol)
 
+    add_executable(network-client-smoke tools/network_client_smoke.cpp)
+    target_link_libraries(network-client-smoke PRIVATE BedrockProtocol::bedrock_protocol)
+
+    add_executable(chunk-smoke tools/chunk_smoke.cpp)
+    target_link_libraries(chunk-smoke PRIVATE BedrockProtocol::bedrock_protocol)
+
     # Runtime helper used by the public API and the bedrock launcher.
     add_executable(bedrock-session tools/session.cpp)
     target_link_libraries(bedrock-session PRIVATE BedrockProtocol::bedrock_protocol)
@@ -105,6 +114,9 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
     add_executable(relay-packet-bot examples/relay_packet_bot.cpp)
     target_link_libraries(relay-packet-bot PRIVATE BedrockProtocol::bedrock_protocol)
 
+    add_executable(relay-test-server examples/relay_test_server.cpp)
+    target_link_libraries(relay-test-server PRIVATE BedrockProtocol::bedrock_protocol)
+
     add_executable(simple-server examples/simple_server.cpp)
     target_link_libraries(simple-server PRIVATE BedrockProtocol::bedrock_protocol)
 endif()
@@ -122,13 +134,13 @@ if(BEDROCK_PROTOCOL_CPP_INSTALL)
     )
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
-        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip raknet-server-smoke raknet-client-smoke
+        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip raknet-server-smoke raknet-client-smoke network-client-smoke chunk-smoke
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
-        install(TARGETS simple-create-client-bot packet-event-bot medium-bot relay-packet-bot simple-server
+        install(TARGETS simple-create-client-bot packet-event-bot medium-bot relay-packet-bot relay-test-server simple-server
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

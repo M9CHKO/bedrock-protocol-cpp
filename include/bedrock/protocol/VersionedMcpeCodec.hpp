@@ -56,9 +56,11 @@ public:
 
 private:
     VersionedBatchCodec batchCodec_;
+    bool compressorInPacketHeader_ = true;
 
     static std::vector<uint8_t> deflateRaw(const std::vector<uint8_t>& input);
     static std::vector<uint8_t> inflateRaw(const std::vector<uint8_t>& input);
+    static bool versionAtLeast(const std::string& version, int major, int minor, int patch);
 };
 
 } // namespace bedrock

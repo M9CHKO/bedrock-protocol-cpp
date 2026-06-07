@@ -2,14 +2,17 @@
 
 #include <zlib.h>
 
+#include <cctype>
 #include <cstddef>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace bedrock {
 
 VersionedMcpeCodec::VersionedMcpeCodec(VersionedBatchCodec batchCodec)
-    : batchCodec_(std::move(batchCodec)) {}
+    : batchCodec_(std::move(batchCodec)),
+      compressorInPacketHeader_(versionAtLeast(batchCodec_.definition().minecraftVersion(), 1, 20, 61)) {}
 
 VersionedMcpeCodec VersionedMcpeCodec::forVersion(const std::string& minecraftVersion) {
     return VersionedMcpeCodec(VersionedBatchCodec::forVersion(minecraftVersion));
@@ -52,8 +55,21 @@ VersionedMcpePayload VersionedMcpeCodec::decodeCompressionPacket(
     }
 
     VersionedMcpePayload payload;
-    payload.compressionHeader = compressionPacket[0];
     payload.compressionPacket = compressionPacket;
+
+    if (!compressorInPacketHeader_) {
+        payload.compressionHeader = static_cast<uint8_t>(VersionedMcpeCompression::DeflateRaw);
+        try {
+            payload.framedBatch = inflateRaw(compressionPacket);
+        } catch (const std::exception&) {
+            payload.compressionHeader = static_cast<uint8_t>(VersionedMcpeCompression::Uncompressed);
+            payload.framedBatch = compressionPacket;
+        }
+        payload.batch = batchCodec_.decodeFramedBatch(payload.framedBatch);
+        return payload;
+    }
+
+    payload.compressionHeader = compressionPacket[0];
 
     std::vector<uint8_t> body(compressionPacket.begin() + 1, compressionPacket.end());
 
@@ -102,6 +118,19 @@ std::vector<uint8_t> VersionedMcpeCodec::encodeCompressionPacket(
     auto framedBatch = batchCodec_.encodeFramedBatch(packets);
 
     std::vector<uint8_t> out;
+
+    if (!compressorInPacketHeader_) {
+        if (compression == VersionedMcpeCompression::Uncompressed) {
+            return framedBatch;
+        }
+
+        if (compression == VersionedMcpeCompression::DeflateRaw) {
+            return deflateRaw(framedBatch);
+        }
+
+        throw std::runtime_error("unsupported compression mode");
+    }
+
     out.push_back(static_cast<uint8_t>(compression));
 
     if (compression == VersionedMcpeCompression::Uncompressed) {
@@ -223,6 +252,29 @@ std::vector<uint8_t> VersionedMcpeCodec::inflateRaw(const std::vector<uint8_t>& 
 
     inflateEnd(&stream);
     return output;
+}
+
+bool VersionedMcpeCodec::versionAtLeast(const std::string& version, int major, int minor, int patch) {
+    std::vector<int> parts;
+    std::string current;
+
+    for (char c : version) {
+        if (c == '.') {
+            parts.push_back(current.empty() ? 0 : std::stoi(current));
+            current.clear();
+        } else if (std::isdigit(static_cast<unsigned char>(c))) {
+            current.push_back(c);
+        }
+    }
+
+    parts.push_back(current.empty() ? 0 : std::stoi(current));
+    while (parts.size() < 3) {
+        parts.push_back(0);
+    }
+
+    if (parts[0] != major) return parts[0] > major;
+    if (parts[1] != minor) return parts[1] > minor;
+    return parts[2] >= patch;
 }
 
 } // namespace bedrock

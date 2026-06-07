@@ -92,6 +92,7 @@ private:
         uint32_t orderedIndex = 0;
         uint16_t outgoingSplitId = 1;
         std::unordered_map<uint16_t, SplitAccumulator> splits;
+        std::unordered_map<uint32_t, std::vector<uint8_t>> sentReliableDatagrams;
     };
 
     RakNetServerOptions options_;

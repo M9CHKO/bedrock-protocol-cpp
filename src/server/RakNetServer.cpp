@@ -356,6 +356,33 @@ std::string peerKey(const sockaddr_in& address) {
     return sockaddrToIp(address) + ":" + std::to_string(sockaddrToPort(address));
 }
 
+std::vector<uint32_t> readAckSequences(const std::vector<uint8_t>& data) {
+    std::vector<uint32_t> sequences;
+    if (data.size() < 3) {
+        return sequences;
+    }
+
+    std::size_t offset = 1;
+    uint16_t count = readU16BE(data, offset);
+
+    for (uint16_t i = 0; i < count && offset < data.size(); ++i) {
+        uint8_t single = data[offset++];
+        if (single) {
+            sequences.push_back(readTriadLE(data, offset));
+        } else {
+            uint32_t start = readTriadLE(data, offset);
+            uint32_t end = readTriadLE(data, offset);
+            if (end >= start && end - start < 4096) {
+                for (uint32_t seq = start; seq <= end; ++seq) {
+                    sequences.push_back(seq);
+                }
+            }
+        }
+    }
+
+    return sequences;
+}
+
 } // namespace
 
 RakNetServer::RakNetServer(RakNetServerOptions options)
@@ -596,6 +623,32 @@ void RakNetServer::handlePacket(
             return;
         }
 
+        if (packetId == ID_ACK || packetId == ID_NACK) {
+            auto sequences = readAckSequences(packet);
+            std::vector<std::vector<uint8_t>> resend;
+            {
+                std::lock_guard<std::mutex> lock(peersMutex_);
+                auto& state = peers_[peerKey(senderAddr)];
+                if (packetId == ID_ACK) {
+                    for (uint32_t sequence : sequences) {
+                        state.sentReliableDatagrams.erase(sequence);
+                    }
+                } else {
+                    for (uint32_t sequence : sequences) {
+                        auto it = state.sentReliableDatagrams.find(sequence);
+                        if (it != state.sentReliableDatagrams.end()) {
+                            resend.push_back(it->second);
+                        }
+                    }
+                }
+            }
+
+            for (const auto& datagram : resend) {
+                sendTo(sender, senderLen, datagram);
+            }
+            return;
+        }
+
         if (packetId >= 0x80 && packetId <= 0x8f) {
             uint32_t sequence = 0;
             auto frames = parseConnectedDatagram(packet, sequence);
@@ -800,6 +853,11 @@ void RakNetServer::sendReliableOrdered(
             out.insert(out.end(), chunk.begin(), chunk.end());
 
             sendTo(target, targetLen, out);
+            {
+                std::lock_guard<std::mutex> lock(peersMutex_);
+                auto& state = peers_[peer.address + ":" + std::to_string(peer.port)];
+                state.sentReliableDatagrams[sequence] = out;
+            }
         }
         return;
     }
@@ -828,6 +886,11 @@ void RakNetServer::sendReliableOrdered(
     out.insert(out.end(), payload.begin(), payload.end());
 
     sendTo(target, targetLen, out);
+    {
+        std::lock_guard<std::mutex> lock(peersMutex_);
+        auto& state = peers_[peer.address + ":" + std::to_string(peer.port)];
+        state.sentReliableDatagrams[sequence] = out;
+    }
 }
 
 } // namespace bedrock

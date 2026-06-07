@@ -27,9 +27,7 @@ add_library(bedrock_protocol
     src/events/BedrockPacketEventAdapter.cpp
     src/generated/GeneratedProtocolTables.cpp
     src/protocol/BatchCodec.cpp
-    src/protocol/BedrockClientRuntime.cpp
     src/protocol/BedrockPacketIO.cpp
-    src/protocol/BedrockProtocolClient.cpp
     src/protocol/GamePacketCodec.cpp
     src/protocol/PacketDispatcher.cpp
     src/protocol/PacketFactory.cpp

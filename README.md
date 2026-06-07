@@ -46,7 +46,7 @@ int main() {
 - Optional deep packet JSON decoding for debugging.
 - `bedrock-protocol`-style in-process client creation and event handlers.
 - Packet-level relay core with `clientbound` / `serverbound` events, `cancel()`, `replace()`, MCPE repacking, forced `client_cache_status`, and level chunk queueing before `start_game`.
-- Early `createServer` runtime: RakNet ping/open-connection listener, connected RakNet request handling, MCPE packet events, `request_network_settings -> network_settings`, login handshake JWT, encrypted `client_to_server_handshake`, and `join` event.
+- Early `createServer` runtime: RakNet ping/open-connection listener, connected RakNet request handling, MCPE packet events, `request_network_settings -> network_settings`, login handshake JWT, encrypted `client_to_server_handshake`, empty resource-pack info/stack flow, and `join` event.
 - Live relay runtime (`createRelayServer`) and test listener example (`relay-test-server`) that let a Bedrock client join the C++ listener while an upstream C++ client connects to a real server.
 - Bedrock chunk/world foundation inspired by `prismarine-chunk`, including paletted subchunks, the 1.18 single-runtime-palette case, biome sections, no-cache `level_chunk`, cache blob status/miss handling, and a tracked `client.world()`.
 - CMake package install for separate bot projects.

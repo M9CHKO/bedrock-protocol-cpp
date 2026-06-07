@@ -183,6 +183,7 @@ The C++ relay core includes these behaviors from the JavaScript relay:
 | Choose chunk cache value | `enableChunkCaching = false` |
 | Queue `level_chunk` before `start_game` | `queueClientboundLevelChunksUntilStartGame = true` |
 | Skip duplicate `play_status login_success` | `skipClientboundLoginSuccess = true` |
+| Skip upstream resource-pack handshake packets in live relay | `skipClientboundResourcePacks = true` |
 | Queue backend packets before downstream join | `markDownstreamJoined()` / `flushDownQueue()` |
 | Queue downstream packets before upstream join | `markUpstreamJoined()` / `flushUpQueue()` |
 | Disable serverbound forwarding | `forwardServerbound = false` |

@@ -200,6 +200,13 @@ bool BedrockLiveRelay::isDownstreamHandshakePacket(const std::string& name) {
         name == "set_local_player_as_initialized";
 }
 
+bool BedrockLiveRelay::isClientboundResourcePackPacket(const std::string& name) {
+    return name == "resource_packs_info" ||
+        name == "resource_pack_stack" ||
+        name == "resource_pack_data_info" ||
+        name == "resource_pack_chunk_data";
+}
+
 bool BedrockLiveRelay::isPlayStatusLoginSuccess(const VersionedGamePacket& packet) {
     return packet.name == "play_status" && !packet.payload.empty() && packet.payload[0] == 0x00;
 }
@@ -270,6 +277,11 @@ void BedrockLiveRelay::startUpstream() {
 
 void BedrockLiveRelay::handleUpstreamPacket(const VersionedGamePacket& packet) {
     if (options_.skipClientboundLoginSuccess && isPlayStatusLoginSuccess(packet)) {
+        return;
+    }
+
+    if (options_.skipClientboundResourcePacks &&
+        isClientboundResourcePackPacket(packet.name)) {
         return;
     }
 

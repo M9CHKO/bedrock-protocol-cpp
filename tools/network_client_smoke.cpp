@@ -9,6 +9,8 @@
 static bool checkVersion(const std::string& version) {
     std::atomic<bool> joined {false};
     std::atomic<bool> gotPlayStatus {false};
+    std::atomic<bool> gotResourcePacksInfo {false};
+    std::atomic<bool> gotResourcePackStack {false};
     std::atomic<bool> gotError {false};
 
     auto server = bedrock::createServer({
@@ -36,6 +38,12 @@ static bool checkVersion(const std::string& version) {
     client.on("play_status", [&](const bedrock::BedrockNetworkClientPacketEvent&) {
         gotPlayStatus = true;
     });
+    client.on("resource_packs_info", [&](const bedrock::BedrockNetworkClientPacketEvent&) {
+        gotResourcePacksInfo = true;
+    });
+    client.on("resource_pack_stack", [&](const bedrock::BedrockNetworkClientPacketEvent&) {
+        gotResourcePackStack = true;
+    });
 
     client.onError([&](const std::string& error) {
         gotError = true;
@@ -48,7 +56,12 @@ static bool checkVersion(const std::string& version) {
         return false;
     }
 
-    for (int i = 0; i < 100 && (!joined.load() || !gotPlayStatus.load()) && !gotError.load(); ++i) {
+    for (int i = 0; i < 150 &&
+         (!joined.load() ||
+          !gotPlayStatus.load() ||
+          !gotResourcePacksInfo.load() ||
+          !gotResourcePackStack.load()) &&
+         !gotError.load(); ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
@@ -61,6 +74,14 @@ static bool checkVersion(const std::string& version) {
     }
     if (!gotPlayStatus.load()) {
         std::cerr << "[NETWORK-CLIENT-SMOKE] " << version << " did not receive play_status\n";
+        return false;
+    }
+    if (!gotResourcePacksInfo.load()) {
+        std::cerr << "[NETWORK-CLIENT-SMOKE] " << version << " did not receive resource_packs_info\n";
+        return false;
+    }
+    if (!gotResourcePackStack.load()) {
+        std::cerr << "[NETWORK-CLIENT-SMOKE] " << version << " did not receive resource_pack_stack\n";
         return false;
     }
     if (gotError.load()) {

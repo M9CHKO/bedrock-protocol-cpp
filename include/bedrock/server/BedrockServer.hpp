@@ -28,6 +28,10 @@ struct BedrockServerOptions {
     std::string version = "latest";
     std::string motd = "Bedrock Protocol C++";
     int maxPlayers = 3;
+    bool autoLogin = true;
+    bool autoResourcePacks = true;
+    uint16_t compressionThreshold = 256;
+    std::string compressionAlgorithm = "deflate";
 };
 
 struct BedrockServerConnection {
@@ -221,6 +225,9 @@ private:
         DerivedKeyResult encryptionKeys;
         bool hasEncryptionKeys = false;
         bool encryptionEnabled = false;
+        bool resourcePacksInfoSent = false;
+        bool resourcePackStackSent = false;
+        bool joined = false;
         uint64_t sendCounter = 0;
         uint64_t receiveCounter = 0;
     };
@@ -286,8 +293,8 @@ private:
     ) {
         if (packet.name == "request_network_settings" && mcpeCodec_.definition().hasPacket("network_settings")) {
             send(connection, "network_settings", ProtoDefValue::object({
-                {"compression_threshold", ProtoDefValue::uinteger(256)},
-                {"compression_algorithm", ProtoDefValue::string("deflate")},
+                {"compression_threshold", ProtoDefValue::uinteger(options_.compressionThreshold)},
+                {"compression_algorithm", ProtoDefValue::string(options_.compressionAlgorithm)},
                 {"client_throttle", ProtoDefValue::boolean(false)},
                 {"client_throttle_threshold", ProtoDefValue::uinteger(0)},
                 {"client_throttle_scalar", ProtoDefValue::floating(0.0)}
@@ -295,7 +302,9 @@ private:
             return;
         }
 
-        if (packet.name == "login" && mcpeCodec_.definition().hasPacket("server_to_client_handshake")) {
+        if (options_.autoLogin &&
+            packet.name == "login" &&
+            mcpeCodec_.definition().hasPacket("server_to_client_handshake")) {
             handleLogin(connection, packet);
             return;
         }
@@ -304,9 +313,19 @@ private:
             send(connection, "play_status", ProtoDefValue::object({
                 {"status", ProtoDefValue::string("login_success")}
             }));
-            for (auto& handler : joinHandlers_) {
-                handler(connection);
+
+            if (options_.autoResourcePacks &&
+                mcpeCodec_.definition().hasPacket("resource_packs_info")) {
+                sendEmptyResourcePacksInfo(connection);
+            } else {
+                emitJoin(connection);
             }
+            return;
+        }
+
+        if (options_.autoResourcePacks &&
+            packet.name == "resource_pack_client_response") {
+            handleResourcePackClientResponse(connection, packet);
         }
     }
 
@@ -352,6 +371,24 @@ private:
         session.encryptionEnabled = true;
         session.sendCounter = 0;
         session.receiveCounter = 0;
+    }
+
+    void handleResourcePackClientResponse(
+        const BedrockServerConnection& connection,
+        const VersionedGamePacket& packet
+    ) {
+        auto& session = sessions_[connectionKey(connection.peer)];
+        const uint8_t status = packet.payload.empty() ? 0xff : packet.payload[0];
+
+        if (status == 0x03 && !session.resourcePackStackSent) {
+            sendEmptyResourcePackStack(connection);
+            session.resourcePackStackSent = true;
+            return;
+        }
+
+        if (status == 0x04) {
+            emitJoin(connection);
+        }
     }
 
     static std::optional<std::string> extractClientPublicKey(const std::string& identityJson) {
@@ -435,6 +472,49 @@ private:
         }
 
         return out;
+    }
+
+    void sendEmptyResourcePacksInfo(const BedrockServerConnection& connection) {
+        auto& session = sessions_[connectionKey(connection.peer)];
+        send(connection, "resource_packs_info", ProtoDefValue::object({
+            {"must_accept", ProtoDefValue::boolean(false)},
+            {"has_addons", ProtoDefValue::boolean(false)},
+            {"has_scripts", ProtoDefValue::boolean(false)},
+            {"disable_vibrant_visuals", ProtoDefValue::boolean(false)},
+            {"force_server_packs", ProtoDefValue::boolean(false)},
+            {"world_template", ProtoDefValue::object({
+                {"uuid", ProtoDefValue::string("00000000-0000-0000-0000-000000000000")},
+                {"version", ProtoDefValue::string("")}
+            })},
+            {"behaviour_packs", ProtoDefValue::array({})},
+            {"texture_packs", ProtoDefValue::array({})},
+            {"resource_pack_links", ProtoDefValue::array({})}
+        }));
+        session.resourcePacksInfoSent = true;
+    }
+
+    void sendEmptyResourcePackStack(const BedrockServerConnection& connection) {
+        send(connection, "resource_pack_stack", ProtoDefValue::object({
+            {"must_accept", ProtoDefValue::boolean(false)},
+            {"behavior_packs", ProtoDefValue::array({})},
+            {"resource_packs", ProtoDefValue::array({})},
+            {"game_version", ProtoDefValue::string(options_.version)},
+            {"experiments", ProtoDefValue::array({})},
+            {"experiments_previously_used", ProtoDefValue::boolean(false)},
+            {"has_editor_packs", ProtoDefValue::boolean(false)}
+        }));
+    }
+
+    void emitJoin(const BedrockServerConnection& connection) {
+        auto& session = sessions_[connectionKey(connection.peer)];
+        if (session.joined) {
+            return;
+        }
+        session.joined = true;
+
+        for (auto& handler : joinHandlers_) {
+            handler(connection);
+        }
     }
 };
 

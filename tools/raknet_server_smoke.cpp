@@ -566,7 +566,8 @@ int main() {
         .port = 0,
         .version = "1.20.40",
         .motd = "Bedrock Protocol C++ Smoke",
-        .maxPlayers = 3
+        .maxPlayers = 3,
+        .autoResourcePacks = false
     });
 
     server.onConnect([&](const bedrock::BedrockServerConnection& connection) {

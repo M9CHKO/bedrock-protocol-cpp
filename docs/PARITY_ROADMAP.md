@@ -13,6 +13,7 @@ This file tracks the remaining work to make the C++ library behave like JavaScri
 - High-level `bedrock::createClient({...})` API without terminal host/version/user arguments.
 - Schema-shaped `send`, `write`, `queue`, and packet event decoding.
 - Early `createServer`.
+- Empty server resource-pack info/stack flow for clients with no required packs.
 - Relay packet rewrite core, `createRelayServer`, and live `relay-test-server` example.
 - `prismarine-chunk` foundation: paletted subchunks, 1.18 single runtime palette handling, biomes, no-cache `level_chunk`, blob status/miss decode, and tracked world columns.
 

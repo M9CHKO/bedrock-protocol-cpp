@@ -24,6 +24,7 @@ struct BedrockLiveRelayOptions {
     bool forwardServerbound = true;
     bool forwardClientbound = true;
     bool skipClientboundLoginSuccess = true;
+    bool skipClientboundResourcePacks = true;
     bool filterDownstreamHandshakePackets = true;
     VersionedMcpeCompression clientboundCompression = VersionedMcpeCompression::DeflateRaw;
 };
@@ -97,6 +98,7 @@ private:
 
     static BedrockLiveRelayOptions normalizeOptions(BedrockLiveRelayOptions options);
     static bool isDownstreamHandshakePacket(const std::string& name);
+    static bool isClientboundResourcePackPacket(const std::string& name);
     static bool isPlayStatusLoginSuccess(const VersionedGamePacket& packet);
 
     void emitError(const std::string& message);

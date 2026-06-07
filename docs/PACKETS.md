@@ -10,9 +10,7 @@ data/minecraft-data/bedrock/<version>/types.yml
 
 ## Useful References
 
-- [`PrismarineJS/bedrock-protocol`](https://github.com/PrismarineJS/bedrock-protocol) - JavaScript client API that inspired this C++ API.
-- [`PrismarineJS/minecraft-data`](https://github.com/PrismarineJS/minecraft-data) - versioned Minecraft data used by the Prismarine ecosystem.
-- [PrismarineJS Minecraft Data documentation](https://prismarinejs.github.io/minecraft-data/) - browsable data tables.
+- ['Minecraft Data documentation'](https://prismarinejs.github.io/minecraft-data/) - browsable data tables.
 - [`Mojang/bedrock-protocol-docs`](https://github.com/Mojang/bedrock-protocol-docs) - Mojang's public notes for Bedrock protocol concepts.
 
 ## Inspect Packets At Runtime

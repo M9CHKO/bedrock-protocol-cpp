@@ -173,9 +173,9 @@ auto frame = relay.handleClientboundMcpe(mcpeFromServer);
 auto bytesToClient = frame.forwardedMcpe;
 ```
 
-## Built-In JS Relay Behaviors
+## Built-In  Relay Behaviors
 
-The C++ relay core includes these behaviors from the JavaScript relay:
+The C++ relay core includes these behaviors from the relay:
 
 | Behavior | C++ option |
 |---|---|
@@ -262,14 +262,3 @@ Expected summary:
 ```text
 [ROUNDTRIP] checkedVersions=50 failures=0
 ```
-
-## What Is Not Done Yet
-
-To become a full JavaScript-style network relay, the library still needs:
-
-- Complete Player session state after `join`, including close/disconnect behavior, batching, compression transitions, and encrypted packet queues.
-- More complete `createRelayServer` bridge behavior for all login/resource-pack/start-game edge cases.
-- Login/resource-pack/session state mapping between downstream and upstream.
-- Live regression tests where a real Bedrock client joins the C++ proxy and the proxy joins an upstream server.
-
-The packet rewrite core is now in place, so the next work should build the server listener around this API instead of inventing a separate relay model.

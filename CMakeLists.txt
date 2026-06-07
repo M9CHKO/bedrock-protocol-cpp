@@ -38,6 +38,7 @@ add_library(bedrock_protocol
     src/protocol/PacketRegistry.cpp
     src/protocol/TypedPacketDispatcher.cpp
     src/protocol/VersionedMcpeCodec.cpp
+    src/relay/BedrockLiveRelay.cpp
     src/server/RakNetServer.cpp
     src/util/BinaryStream.cpp
     src/util/VarInt.cpp
@@ -88,6 +89,9 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
     add_executable(network-client-smoke tools/network_client_smoke.cpp)
     target_link_libraries(network-client-smoke PRIVATE BedrockProtocol::bedrock_protocol)
 
+    add_executable(live-relay-smoke tools/live_relay_smoke.cpp)
+    target_link_libraries(live-relay-smoke PRIVATE BedrockProtocol::bedrock_protocol)
+
     add_executable(chunk-smoke tools/chunk_smoke.cpp)
     target_link_libraries(chunk-smoke PRIVATE BedrockProtocol::bedrock_protocol)
 
@@ -134,7 +138,7 @@ if(BEDROCK_PROTOCOL_CPP_INSTALL)
     )
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_TOOLS)
-        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip raknet-server-smoke raknet-client-smoke network-client-smoke chunk-smoke
+        install(TARGETS bedrock bedrock-session login xbox-login ping protocol-roundtrip raknet-server-smoke raknet-client-smoke network-client-smoke live-relay-smoke chunk-smoke
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

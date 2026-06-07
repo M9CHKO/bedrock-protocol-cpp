@@ -13,13 +13,13 @@ This file tracks the remaining work to make the C++ library behave like JavaScri
 - High-level `bedrock::createClient({...})` API without terminal host/version/user arguments.
 - Schema-shaped `send`, `write`, `queue`, and packet event decoding.
 - Early `createServer`.
-- Relay packet rewrite core and live `relay-test-server` example.
+- Relay packet rewrite core, `createRelayServer`, and live `relay-test-server` example.
 - `prismarine-chunk` foundation: paletted subchunks, 1.18 single runtime palette handling, biomes, no-cache `level_chunk`, blob status/miss decode, and tracked world columns.
 
 ## Still To Port
 
 - Full JS `createServer` player runtime: player object lifecycle, disconnect semantics, batching queues, resource-pack state, close handling, and all login edge cases.
-- Full JS `Relay` runtime parity: downstream player mapping, upstream session mapping, packet mutation hooks, queue flush behavior, and live proxy tests for every supported login path.
+- Full JS `Relay` runtime parity: downstream player mapping, upstream session mapping, packet mutation hooks, queue flush behavior, compression/resource-pack edge cases, and live proxy tests for every supported login path.
 - Full `prismarine-chunk` parity: subchunk packets, local persistence, network persistence, NBT block entities, cache blob hashing/generation, and chunk serialization tests per version.
 - Full `prismarine-world` style world provider: loading/unloading, async provider API equivalent, columns by dimension, and block/entity helpers.
 - Complete packet datatype audit against `node_modules/bedrock-protocol/src/datatypes` for every bundled version.

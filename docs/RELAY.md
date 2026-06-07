@@ -8,7 +8,7 @@ The C++ relay API follows the packet event model from:
 - `event.replace(packet)`: forward a changed packet instead.
 - `event.replace({packet1, packet2})`: forward several packets.
 
-This is currently a packet-level relay core plus an early C++ `createServer` runtime and upstream `BedrockNetworkClient`. The server runtime can listen for RakNet clients, answer ping/open-connection, handle connected RakNet request flow, emit MCPE packet events, answer `request_network_settings`, complete the login encryption handshake, and emit `join`. The `relay-test-server` example wires the listener to an upstream client so a Bedrock client can join it for live testing.
+This is currently a packet-level relay core plus `createRelayServer`, an early live relay runtime built from `createServer` and upstream `BedrockNetworkClient`. The server runtime can listen for RakNet clients, answer ping/open-connection, handle connected RakNet request flow, emit MCPE packet events, answer `request_network_settings`, complete the login encryption handshake, and emit `join`. The `relay-test-server` example exposes this runtime so a Bedrock client can join it for live testing.
 
 ## Basic Example
 
@@ -40,6 +40,40 @@ int main() {
     });
 }
 ```
+
+## Live Relay Server
+
+Use `createRelayServer` when you want a Bedrock client to join the C++ listener and have the C++ library connect to an upstream server.
+
+```cpp
+bedrock::BedrockLiveRelayOptions options;
+options.server.host = "0.0.0.0";
+options.server.port = 19132;
+options.server.version = "1.20.40";
+options.server.motd = "Bedrock Protocol C++ Relay";
+
+options.upstream.host = "cpe.ign.gg";
+options.upstream.port = 19132;
+options.upstream.username = "StewedV";
+options.upstream.profile = "StewedV";
+options.upstream.version = "1.20.40";
+options.upstream.offline = false;
+options.upstream.interactiveAuth = true;
+
+auto relay = bedrock::createRelayServer(options);
+
+relay.on("serverbound", [](bedrock::BedrockRelayPacketEvent& event) {
+    std::cout << "client -> upstream " << event.packet.name << "\n";
+});
+
+relay.on("clientbound", [](bedrock::BedrockRelayPacketEvent& event) {
+    std::cout << "upstream -> client " << event.packet.name << "\n";
+});
+
+relay.listen();
+```
+
+`createRelayServer` currently requires the downstream listener version and upstream client version to match. This keeps packet ids, compression shape, encryption, and schema encoding consistent while the full JS relay runtime is being ported.
 
 ## Packet Directions
 
@@ -212,7 +246,7 @@ Edit `examples/relay_test_server.cpp` before building to change:
 | `upstreamOffline` | Use offline auth for local offline upstream servers. |
 | `interactiveAuth` | Show device-code login when the Xbox cache is missing. |
 
-Start `relay-test-server`, add the listener address in Minecraft, and join it. The terminal prints `[client -> upstream]` and `[upstream -> client]` packet names while forwarding supported traffic.
+Start `relay-test-server`, add the listener address in Minecraft, and join it. The terminal prints `[client -> upstream]` and `[upstream -> client]` packet names while forwarding supported traffic through `createRelayServer`.
 
 ## Version Safety
 
@@ -233,7 +267,7 @@ Expected summary:
 To become a full JavaScript-style network relay, the library still needs:
 
 - Complete Player session state after `join`, including close/disconnect behavior, batching, compression transitions, and encrypted packet queues.
-- More complete runtime bridge behavior for all login/resource-pack/start-game edge cases.
+- More complete `createRelayServer` bridge behavior for all login/resource-pack/start-game edge cases.
 - Login/resource-pack/session state mapping between downstream and upstream.
 - Live regression tests where a real Bedrock client joins the C++ proxy and the proxy joins an upstream server.
 

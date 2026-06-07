@@ -47,7 +47,7 @@ int main() {
 - `bedrock-protocol`-style in-process client creation and event handlers.
 - Packet-level relay core with `clientbound` / `serverbound` events, `cancel()`, `replace()`, MCPE repacking, forced `client_cache_status`, and level chunk queueing before `start_game`.
 - Early `createServer` runtime: RakNet ping/open-connection listener, connected RakNet request handling, MCPE packet events, `request_network_settings -> network_settings`, login handshake JWT, encrypted `client_to_server_handshake`, and `join` event.
-- Test relay listener example (`relay-test-server`) that lets a Bedrock client join the C++ listener while an upstream C++ client connects to a real server.
+- Live relay runtime (`createRelayServer`) and test listener example (`relay-test-server`) that let a Bedrock client join the C++ listener while an upstream C++ client connects to a real server.
 - Bedrock chunk/world foundation inspired by `prismarine-chunk`, including paletted subchunks, the 1.18 single-runtime-palette case, biome sections, no-cache `level_chunk`, cache blob status/miss handling, and a tracked `client.world()`.
 - CMake package install for separate bot projects.
 - Windows through MSYS2/MinGW, Linux, and Termux builds.
@@ -168,7 +168,7 @@ Examples included in this repository:
 | `packet-event-bot` | Packet event logging and one outgoing schema packet. |
 | `medium-bot` | Medium bot example with packet handlers, chunk radius request, and movement packet writing. |
 | `relay-packet-bot` | Packet-level relay example with serverbound/clientbound hooks. |
-| `relay-test-server` | Runnable relay listener for joining from Minecraft and forwarding to an upstream server. |
+| `relay-test-server` | Runnable `createRelayServer` listener for joining from Minecraft and forwarding to an upstream server. |
 | `simple-server` | Minimal `createServer` listener with connect, packet, and join events. |
 
 ## Roadmap To JavaScript bedrock-protocol Parity
@@ -177,7 +177,7 @@ Current focus is matching the JavaScript `bedrock-protocol` model rather than ad
 
 - Keep packet read/write schema-driven through bundled `minecraft-data` and generated protocol tables.
 - Continue porting and testing `protodef` native datatypes from `node_modules/bedrock-protocol/src/datatypes` for every bundled version.
-- Keep relay behavior aligned with JavaScript `bedrock-protocol/src/relay.js`. The C++ server listener, upstream client, and test relay listener now exist; the remaining large step is the full Player session/runtime parity and live proxy hardening.
+- Keep relay behavior aligned with JavaScript `bedrock-protocol/src/relay.js`. The C++ server listener, upstream client, `createRelayServer`, and test relay listener now exist; the remaining large step is full Player session/runtime parity and live proxy hardening.
 - Continue porting `prismarine-chunk` / `prismarine-world` behavior: subchunk request packets, local/network persistence NBT, block entity NBT, blob hashing, and cache generation.
 - Add typed convenience builders on top of schema objects without replacing schema objects.
 - Add more live integration tests for online/offline servers and version-specific packet shapes.

@@ -1,15 +1,9 @@
 #include <bedrock/bedrock.hpp>
 
-#include <atomic>
 #include <chrono>
 #include <iostream>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <stdexcept>
 #include <string>
 #include <thread>
-#include <vector>
 
 namespace {
 
@@ -50,29 +44,10 @@ RelayTestSettings relaySettings() {
     return settings;
 }
 
-bool isDownstreamHandshakePacket(const std::string& name) {
-    return name == "request_network_settings" ||
-        name == "login" ||
-        name == "client_to_server_handshake" ||
-        name == "resource_pack_client_response" ||
-        name == "client_cache_status" ||
-        name == "request_chunk_radius" ||
-        name == "set_local_player_as_initialized";
-}
-
-bool isPlayStatusLoginSuccess(const bedrock::VersionedGamePacket& packet) {
-    return packet.name == "play_status" && !packet.payload.empty() && packet.payload[0] == 0x00;
-}
-
-const char* statusName(bedrock::BedrockNetworkClientStatus status) {
-    switch (status) {
-        case bedrock::BedrockNetworkClientStatus::Disconnected: return "disconnected";
-        case bedrock::BedrockNetworkClientStatus::Connecting: return "connecting";
-        case bedrock::BedrockNetworkClientStatus::Authenticating: return "authenticating";
-        case bedrock::BedrockNetworkClientStatus::Initializing: return "initializing";
-        case bedrock::BedrockNetworkClientStatus::Initialized: return "initialized";
-    }
-    return "unknown";
+const char* directionName(bedrock::BedrockRelayDirection direction) {
+    return direction == bedrock::BedrockRelayDirection::Clientbound
+        ? "upstream -> client"
+        : "client -> upstream";
 }
 
 } // namespace
@@ -80,124 +55,60 @@ const char* statusName(bedrock::BedrockNetworkClientStatus status) {
 int main() {
     const auto settings = relaySettings();
 
-    auto server = bedrock::createServer({
-        .host = settings.listenHost,
-        .port = settings.listenPort,
-        .version = settings.version,
-        .motd = settings.motd,
-        .maxPlayers = settings.maxPlayers
+    bedrock::BedrockLiveRelayOptions options;
+    options.server.host = settings.listenHost;
+    options.server.port = settings.listenPort;
+    options.server.version = settings.version;
+    options.server.motd = settings.motd;
+    options.server.maxPlayers = settings.maxPlayers;
+
+    options.upstream.host = settings.upstreamHost;
+    options.upstream.port = settings.upstreamPort;
+    options.upstream.username = settings.upstreamUsername;
+    options.upstream.profile = settings.upstreamProfile;
+    options.upstream.version = settings.version;
+    options.upstream.offline = settings.upstreamOffline;
+    options.upstream.interactiveAuth = settings.interactiveAuth;
+    options.upstream.clientCacheEnabled = settings.clientCacheEnabled;
+    options.upstream.trackWorld = true;
+    options.upstream.chunkRadius = settings.chunkRadius;
+
+    auto relay = bedrock::createRelayServer(std::move(options));
+
+    relay.onConnect([](const bedrock::BedrockServerConnection& connection) {
+        std::cout << "[downstream] connect "
+                  << connection.address << ":" << connection.port << "\n";
     });
 
-    std::mutex relayMutex;
-    std::optional<bedrock::BedrockServerConnection> downstream;
-    std::vector<bedrock::VersionedGamePacket> pendingServerbound;
-    std::unique_ptr<bedrock::BedrockNetworkClient> upstream;
-    std::thread upstreamThread;
-    std::atomic<bool> upstreamStarted {false};
-    std::atomic<bool> upstreamReady {false};
-
-    auto startUpstream = [&]() {
-        bool expected = false;
-        if (!upstreamStarted.compare_exchange_strong(expected, true)) {
-            return;
-        }
-
-        bedrock::BedrockNetworkClientOptions options;
-        options.host = settings.upstreamHost;
-        options.port = settings.upstreamPort;
-        options.username = settings.upstreamUsername;
-        options.profile = settings.upstreamProfile;
-        options.version = settings.version;
-        options.offline = settings.upstreamOffline;
-        options.interactiveAuth = settings.interactiveAuth;
-        options.autoResourcePackResponses = true;
-        options.autoInitPlayer = true;
-        options.clientCacheEnabled = settings.clientCacheEnabled;
-        options.trackWorld = true;
-        options.chunkRadius = settings.chunkRadius;
-
-        upstream = std::make_unique<bedrock::BedrockNetworkClient>(std::move(options));
-
-        upstream->onStatus([](bedrock::BedrockNetworkClientStatus status) {
-            std::cout << "[upstream] status " << statusName(status) << "\n";
-        });
-
-        upstream->onError([](const std::string& message) {
-            std::cerr << "[upstream] error " << message << "\n";
-        });
-
-        upstream->onClose([](const std::string& reason) {
-            std::cout << "[upstream] closed " << reason << "\n";
-        });
-
-        upstream->onAny([&](const bedrock::BedrockNetworkClientPacketEvent& event) {
-            if (settings.printPackets) {
-                std::cout << "[upstream -> client] " << event.packet.name << "\n";
-            }
-
-            if (isPlayStatusLoginSuccess(event.packet)) {
-                return;
-            }
-
-            std::lock_guard<std::mutex> lock(relayMutex);
-            if (!downstream.has_value()) {
-                return;
-            }
-
-            server.sendPacket(
-                *downstream,
-                event.packet,
-                bedrock::VersionedMcpeCompression::DeflateRaw
-            );
-        });
-
-        upstream->onJoin([&]() {
-            upstreamReady.store(true);
-            std::vector<bedrock::VersionedGamePacket> queued;
-            {
-                std::lock_guard<std::mutex> lock(relayMutex);
-                queued = std::move(pendingServerbound);
-                pendingServerbound.clear();
-            }
-            for (const auto& packet : queued) {
-                upstream->sendPacket(packet);
-            }
-        });
-
-        upstreamThread = std::thread([&]() {
-            upstream->run();
-        });
-    };
-
-    server.onConnect([](const bedrock::BedrockServerConnection& connection) {
-        std::cout << "[downstream] connect " << connection.address << ":" << connection.port << "\n";
+    relay.onJoin([](const bedrock::BedrockServerConnection& connection) {
+        std::cout << "[downstream] joined "
+                  << connection.address << ":" << connection.port << "\n";
     });
 
-    server.onJoin([&](const bedrock::BedrockServerConnection& connection) {
-        {
-            std::lock_guard<std::mutex> lock(relayMutex);
-            downstream = connection;
-        }
-        std::cout << "[downstream] joined " << connection.address << ":" << connection.port << "\n";
-        startUpstream();
+    relay.onError([](const std::string& message) {
+        std::cerr << "[relay] " << message << "\n";
     });
 
-    server.onAny([&](const bedrock::BedrockServerPacketEvent& event) {
+    relay.onStatus([](const bedrock::BedrockLiveRelayStatus& status) {
+        std::cout << "[relay] listening=" << status.listening
+                  << " downstream=" << status.downstreamJoined
+                  << " upstream_started=" << status.upstreamStarted
+                  << " upstream_ready=" << status.upstreamReady
+                  << " port=" << status.boundPort << "\n";
+    });
+
+    relay.on("serverbound", [&](bedrock::BedrockRelayPacketEvent& event) {
         if (settings.printPackets) {
-            std::cout << "[client -> upstream] " << event.packet.name << "\n";
+            std::cout << "[" << directionName(event.direction) << "] "
+                      << event.packet.name << "\n";
         }
+    });
 
-        if (isDownstreamHandshakePacket(event.packet.name)) {
-            return;
+    relay.on("clientbound", [&](bedrock::BedrockRelayPacketEvent& event) {
+        if (settings.printPackets) {
+            std::cout << "[" << directionName(event.direction) << "] "
+                      << event.packet.name << "\n";
         }
-
-        if (!upstream || !upstreamReady.load()) {
-            std::lock_guard<std::mutex> lock(relayMutex);
-            pendingServerbound.push_back(event.packet);
-            return;
-        }
-
-        upstream->sendPacket(event.packet);
     });
 
     std::cout << "Relay listener: " << settings.listenHost << ":" << settings.listenPort << "\n";
@@ -205,13 +116,9 @@ int main() {
               << " version=" << settings.version << "\n";
     std::cout << "Join this relay from Minecraft, then watch packet logs here.\n";
 
-    server.listen();
+    relay.listen();
 
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-
-    if (upstreamThread.joinable()) {
-        upstreamThread.join();
     }
 }

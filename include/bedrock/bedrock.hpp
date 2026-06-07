@@ -8,6 +8,7 @@
 #include <bedrock/protocol/ProtocolDefinition.hpp>
 #include <bedrock/protodef/ProtoDefPacketDecoder.hpp>
 #include <bedrock/protodef/ProtoDefValue.hpp>
+#include <bedrock/relay/BedrockLiveRelay.hpp>
 #include <bedrock/relay/BedrockRelay.hpp>
 #include <bedrock/server/BedrockServer.hpp>
 #include <bedrock/world/BedrockChunk.hpp>

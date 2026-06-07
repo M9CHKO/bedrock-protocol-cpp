@@ -1,11 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>bedrock-protocol-cpp</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="bedrock-protocol-cpp - Minecraft Bedrock Protocol Client Library for C++20 with RakNet, Xbox Authentication and Packet Serialization." />
+  <title>bedrock-protocol-cpp</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(0, 140, 255, 0.25), transparent 35%),
+        radial-gradient(circle at top right, rgba(120, 0, 255, 0.25), transparent 30%),
+        #070b14;
+      color: #eef4ff;
+      line-height: 1.6;
+    }
+
+    header {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 80px 8%;
+    }
+
+    .hero {
+      max-width: 1100px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: #9ed0ff;
+      font-size: 14px;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      font-size: clamp(46px, 8vw, 92px);
+      line-height: 1;
+      letter-spacing: -4px;
+      margin-bottom: 28px;
+    }
+
+    .gradient {
+      background: linear-gradient(90deg, #58a6ff, #9b7cff, #35f2c2);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    .subtitle {
+      max-width: 760px;
+      font-size: 22px;
+      color: #b8c7dd;
+      margin-bottom: 36px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 14px 22px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+      transition: 0.2s;
+    }
+
+    .primary {
+      background: #238636;
+      color: white;
+    }
+
+    .secondary {
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #eef4ff;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      opacity: 0.9;
+    }
+
+    section {
+      padding: 80px 8%;
+    }
+
+    .section-title {
+      font-size: 38px;
+      margin-bottom: 28px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 22px;
+    }
+
+    .card {
+      padding: 26px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(12px);
+    }
+
+    .card h3 {
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+
+    .card p {
+      color: #aebdd1;
+    }
+
+    .code {
+      margin-top: 22px;
+      padding: 24px;
+      border-radius: 16px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      overflow-x: auto;
+      color: #d6deff;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+    }
+
+    footer {
+      padding: 40px 8%;
+      color: #7d8da6;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+  </style>
 </head>
+
 <body>
-<h1>bedrock-protocol-cpp</h1>
-<p>Minecraft Bedrock Protocol Client Library for C++20</p>
+  <header>
+    <div class="hero">
+      <div class="badge">Minecraft Bedrock • C++20 • RakNet • Protocol Client</div>
+
+      <h1>
+        bedrock-protocol-cpp<br>
+        <span class="gradient">native Bedrock client library</span>
+      </h1>
+
+      <p class="subtitle">
+        A modern C++20 client library for the Minecraft Bedrock protocol.
+        Built for bot projects, packet handling, RakNet networking,
+        authentication, encryption and protocol experimentation.
+      </p>
+
+      <div class="buttons">
+        <a class="btn primary" href="https://github.com/M9CHKO/bedrock-protocol-cpp">View on GitHub</a>
+        <a class="btn secondary" href="https://github.com/M9CHKO/bedrock-protocol-cpp/tree/main/docs">Documentation</a>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <h2 class="section-title">Designed for protocol work</h2>
+
+    <div class="grid">
+      <div class="card">
+        <h3>RakNet Networking</h3>
+        <p>Low-level networking foundation for Minecraft Bedrock connections.</p>
+      </div>
+
+      <div class="card">
+        <h3>Packet Serialization</h3>
+        <p>Read, write and experiment with Bedrock protocol packet structures.</p>
+      </div>
+
+      <div class="card">
+        <h3>Bot Projects</h3>
+        <p>Create native C++ bots with configurable host, port, version and username.</p>
+      </div>
+
+      <div class="card">
+        <h3>Multi-Version Focus</h3>
+        <p>Built with versioned protocol data and compatibility in mind.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Example</h2>
+
+    <div class="code">
+<pre>#include &lt;bedrock/bedrock.hpp&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    auto client = bedrock::createClient({
+        .host = "localhost",
+        .port = 19132,
+        .username = "Bot",
+        .version = "1.20.40",
+        .offline = true
+    });
+
+    client.on("start_game", [](const bedrock::Packet&) {
+        std::cout &lt;&lt; "Joined world\n";
+    });
+
+    return client.run();
+}</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Project goals</h2>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Clean C++20 API</h3>
+        <p>Simple client creation, event handling and packet manipulation.</p>
+      </div>
+
+      <div class="card">
+        <h3>Protocol Research</h3>
+        <p>A practical base for understanding and testing Bedrock networking.</p>
+      </div>
+
+      <div class="card">
+        <h3>Open Source</h3>
+        <p>Built publicly for developers interested in Minecraft Bedrock internals.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    © 2026 bedrock-protocol-cpp — Minecraft Bedrock Protocol Client Library for C++20
+  </footer>
 </body>
 </html>

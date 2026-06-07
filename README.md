@@ -2,6 +2,14 @@
 
 Minecraft Bedrock Protocol Client Library for C++20
 
+## Supported Versions
+
+The bundled protocol data currently includes these Bedrock versions:
+
+`0.14.3 (70)` • `0.15.6 (82)` • `1.0.0 (100)` • `1.16.201 (422)` • `1.16.210 (428)` • `1.16.220 (431)` • `1.17.0 (440)` • `1.17.10 (448)` • `1.17.30 (465)` • `1.17.40 (471)` • `1.18.0 (475)` • `1.18.11 (486)` • `1.18.30 (503)` • `1.19.1 (527)` • `1.19.10 (534)` • `1.19.20 (544)` • `1.19.21 (545)` • `1.19.30 (554)` • `1.19.40 (557)` • `1.19.50 (560)` • `1.19.60 (567)` • `1.19.62 (567)` • `1.19.63 (568)` • `1.19.70 (575)` • `1.19.80 (582)` • `1.20.0 (589)` • `1.20.10 (594)` • `1.20.15 (594)` • `1.20.30 (618)` • `1.20.40 (622)` • `1.20.50 (630)` • `1.20.61 (649)` • `1.20.71 (662)` • `1.20.80 (671)` • `1.21.0 (685)` • `1.21.2 (686)` • `1.21.20 (712)` • `1.21.30 (729)` • `1.21.42 (748)` • `1.21.50 (766)` • `1.21.60 (776)` • `1.21.70 (786)` • `1.21.80 (800)` • `1.21.90 (818)` • `1.21.93 (819)` • `1.21.100 (827)` • `1.21.111 (844)` • `1.21.120 (859)` • `1.21.124 (860)` • `1.21.130 (898)` • `1.26.0 (924)` • `1.26.10 (944)` • `1.26.20 (975)`
+
+More details and version-specific notes are in [docs/VERSIONS.md](docs/VERSIONS.md).
+
 It is built for bot projects: you write normal C++ code, put connection settings in `bedrock::createClient({...})`, build your bot, and run your bot executable without passing host/version/user arguments in the terminal.
 
 ```cpp
@@ -182,16 +190,6 @@ Current focus is matching the JavaScript `bedrock-protocol` model rather than ad
 - Add typed convenience builders on top of schema objects without replacing schema objects.
 - Add more live integration tests for online/offline servers and version-specific packet shapes.
 - Add higher-level bot helpers for chat, movement, inventory, entities, chunks, and resource packs.
-
-## Supported Versions
-
-The bundled protocol data currently includes these Bedrock versions:
-
-### Supported Versions
-
-`0.14.3 (70)` • `0.15.6 (82)` • `1.0.0 (100)` • `1.16.201 (422)` • `1.16.210 (428)` • `1.16.220 (431)` • `1.17.0 (440)` • `1.17.10 (448)` • `1.17.30 (465)` • `1.17.40 (471)` • `1.18.0 (475)` • `1.18.11 (486)` • `1.18.30 (503)` • `1.19.1 (527)` • `1.19.10 (534)` • `1.19.20 (544)` • `1.19.21 (545)` • `1.19.30 (554)` • `1.19.40 (557)` • `1.19.50 (560)` • `1.19.60 (567)` • `1.19.62 (567)` • `1.19.63 (568)` • `1.19.70 (575)` • `1.19.80 (582)` • `1.20.0 (589)` • `1.20.10 (594)` • `1.20.15 (594)` • `1.20.30 (618)` • `1.20.40 (622)` • `1.20.50 (630)` • `1.20.61 (649)` • `1.20.71 (662)` • `1.20.80 (671)` • `1.21.0 (685)` • `1.21.2 (686)` • `1.21.20 (712)` • `1.21.30 (729)` • `1.21.42 (748)` • `1.21.50 (766)` • `1.21.60 (776)` • `1.21.70 (786)` • `1.21.80 (800)` • `1.21.90 (818)` • `1.21.93 (819)` • `1.21.100 (827)` • `1.21.111 (844)` • `1.21.120 (859)` • `1.21.124 (860)` • `1.21.130 (898)` • `1.26.0 (924)` • `1.26.10 (944)` • `1.26.20 (975)`
-
-More details and version-specific notes are in [docs/VERSIONS.md](docs/VERSIONS.md).
 
 ## Build Status Checks
 

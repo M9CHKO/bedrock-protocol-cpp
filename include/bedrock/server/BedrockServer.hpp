@@ -143,6 +143,23 @@ public:
         raknet_.sendReliable(connection.peer, mcpe);
     }
 
+    void disconnect(
+        const BedrockServerConnection& connection,
+        const std::string& reason = "Server closed",
+        bool hide = false
+    ) {
+        if (!mcpeCodec_.definition().hasPacket("disconnect")) {
+            return;
+        }
+
+        send(connection, "disconnect", ProtoDefValue::object({
+            {"reason", ProtoDefValue::string("unknown")},
+            {"hide_disconnect_reason", ProtoDefValue::boolean(hide)},
+            {"message", ProtoDefValue::string(reason)},
+            {"filtered_message", ProtoDefValue::string("")}
+        }));
+    }
+
 private:
     BedrockServerOptions options_;
     RakNetServer raknet_;

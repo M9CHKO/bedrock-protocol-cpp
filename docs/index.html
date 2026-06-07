@@ -1,207 +1,305 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="bedrock-protocol-cpp - Minecraft Bedrock Protocol Client Library for C++20 with RakNet, Xbox Authentication and Packet Serialization." />
-  <title>bedrock-protocol-cpp</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bedrock-protocol-cpp</title>
 
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+<style>
+:root{
+  --bg:#070b14;
+  --card:#101827;
+  --card2:#0d1322;
+  --text:#e6edf3;
+  --muted:#8b949e;
+  --green:#3fb950;
+  --blue:#58a6ff;
+  --orange:#f0883e;
+  --border:#243044;
+}
 
-    body {
-      font-family: Inter, Segoe UI, Arial, sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(0, 140, 255, 0.25), transparent 35%),
-        radial-gradient(circle at top right, rgba(120, 0, 255, 0.25), transparent 30%),
-        #070b14;
-      color: #eef4ff;
-      line-height: 1.6;
-    }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
 
-    header {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      padding: 80px 8%;
-    }
+body{
+  margin:0;
+  font-family:Segoe UI,Arial,sans-serif;
+  background:
+    radial-gradient(circle at top left,#15325c 0,#070b14 34%),
+    radial-gradient(circle at top right,#17442a 0,#070b14 30%);
+  color:var(--text);
+}
 
-    .hero {
-      max-width: 1100px;
-    }
+a{text-decoration:none;color:inherit}
 
-    .badge {
-      display: inline-block;
-      padding: 8px 14px;
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      color: #9ed0ff;
-      font-size: 14px;
-      margin-bottom: 26px;
-    }
+header{
+  position:sticky;
+  top:0;
+  z-index:99;
+  backdrop-filter:blur(16px);
+  background:rgba(7,11,20,.82);
+  border-bottom:1px solid var(--border);
+}
 
-    h1 {
-      font-size: clamp(46px, 8vw, 92px);
-      line-height: 1;
-      letter-spacing: -4px;
-      margin-bottom: 28px;
-    }
+.header-inner{
+  max-width:1200px;
+  margin:auto;
+  padding:18px 24px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
 
-    .gradient {
-      background: linear-gradient(90deg, #58a6ff, #9b7cff, #35f2c2);
-      -webkit-background-clip: text;
-      color: transparent;
-    }
+.logo{font-size:20px;font-weight:900}
+nav a{margin-left:20px;color:var(--muted);font-weight:700;font-size:14px}
+nav a:hover{color:#fff}
 
-    .subtitle {
-      max-width: 760px;
-      font-size: 22px;
-      color: #b8c7dd;
-      margin-bottom: 36px;
-    }
+section{
+  max-width:1200px;
+  margin:auto;
+  padding:70px 24px;
+}
 
-    .buttons {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
+.hero{
+  display:grid;
+  grid-template-columns:1.1fr .9fr;
+  gap:35px;
+  align-items:center;
+  min-height:78vh;
+}
 
-    .btn {
-      padding: 14px 22px;
-      border-radius: 12px;
-      text-decoration: none;
-      font-weight: 700;
-      transition: 0.2s;
-    }
+.badge{
+  display:inline-block;
+  padding:8px 14px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  color:var(--green);
+  background:rgba(63,185,80,.08);
+  font-weight:800;
+}
 
-    .primary {
-      background: #238636;
-      color: white;
-    }
+h1{
+  font-size:58px;
+  line-height:1.02;
+  margin:20px 0;
+  letter-spacing:-2px;
+}
 
-    .secondary {
-      border: 1px solid rgba(255,255,255,0.2);
-      color: #eef4ff;
-      background: rgba(255,255,255,0.06);
-    }
+h2{
+  font-size:36px;
+  margin:0 0 14px;
+}
 
-    .btn:hover {
-      transform: translateY(-2px);
-      opacity: 0.9;
-    }
+p,li{
+  color:var(--muted);
+  line-height:1.7;
+}
 
-    section {
-      padding: 80px 8%;
-    }
+.hero p{font-size:19px}
 
-    .section-title {
-      font-size: 38px;
-      margin-bottom: 28px;
-    }
+.buttons{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-top:28px;
+}
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 22px;
-    }
+.btn{
+  padding:14px 18px;
+  border-radius:12px;
+  font-weight:900;
+  border:1px solid var(--border);
+}
 
-    .card {
-      padding: 26px;
-      border-radius: 18px;
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.12);
-      backdrop-filter: blur(12px);
-    }
+.primary{background:var(--green);color:#06120a}
+.secondary{background:#111827;color:white}
 
-    .card h3 {
-      margin-bottom: 10px;
-      color: #ffffff;
-    }
+.terminal,.code-block{
+  background:#050911;
+  border:1px solid var(--border);
+  border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 30px 90px rgba(0,0,0,.35);
+}
 
-    .card p {
-      color: #aebdd1;
-    }
+.term-top{
+  background:#0f172a;
+  padding:14px;
+  border-bottom:1px solid var(--border);
+  color:var(--muted);
+  font-weight:800;
+}
 
-    .code {
-      margin-top: 22px;
-      padding: 24px;
-      border-radius: 16px;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      overflow-x: auto;
-      color: #d6deff;
-      font-family: Consolas, monospace;
-      font-size: 14px;
-    }
+pre{
+  margin:0;
+  padding:22px;
+  overflow:auto;
+  color:#d1f7d6;
+  font-size:14px;
+  line-height:1.6;
+}
 
-    footer {
-      padding: 40px 8%;
-      color: #7d8da6;
-      border-top: 1px solid rgba(255,255,255,0.08);
-    }
-  </style>
+.grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+}
+
+.card{
+  background:linear-gradient(180deg,var(--card),var(--card2));
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:24px;
+}
+
+.card h3{margin-top:0;color:white}
+.icon{font-size:30px;margin-bottom:10px}
+
+.two{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+}
+
+.protocols{
+  background:#0b1220;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:20px;
+  line-height:2.35;
+}
+
+.protocols code{
+  background:#151f33;
+  border:1px solid #253552;
+  padding:5px 8px;
+  border-radius:8px;
+  color:#c9d1d9;
+  white-space:nowrap;
+}
+
+.docs-layout{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  gap:24px;
+}
+
+.docs-sidebar{
+  position:sticky;
+  top:90px;
+  align-self:start;
+  background:#0d1322;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:16px;
+}
+
+.docs-sidebar a{
+  display:block;
+  padding:11px 12px;
+  color:var(--muted);
+  border-radius:10px;
+  font-weight:800;
+  font-size:14px;
+}
+
+.docs-sidebar a:hover{
+  background:#151f33;
+  color:#fff;
+}
+
+.doc-panel{
+  background:linear-gradient(180deg,#101827,#0b1220);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:26px;
+  margin-bottom:18px;
+}
+
+.doc-panel h3{
+  margin-top:0;
+  font-size:25px;
+}
+
+.copy-btn{
+  float:right;
+  background:#238636;
+  color:white;
+  border:0;
+  padding:8px 12px;
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+.copy-btn:hover{background:#2ea043}
+
+details{
+  background:#0d1322;
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px;
+  margin-bottom:12px;
+}
+
+summary{
+  cursor:pointer;
+  color:#fff;
+  font-weight:900;
+}
+
+footer{
+  text-align:center;
+  padding:50px 24px;
+  color:var(--muted);
+  background:#050911;
+  border-top:1px solid var(--border);
+}
+
+@media(max-width:900px){
+  .hero,.grid,.two,.docs-layout{grid-template-columns:1fr}
+  h1{font-size:42px}
+  nav{display:none}
+  .docs-sidebar{position:relative;top:0}
+}
+</style>
 </head>
 
 <body>
-  <header>
-    <div class="hero">
-      <div class="badge">Minecraft Bedrock • C++20 • RakNet • Protocol Client</div>
 
-      <h1>
-        bedrock-protocol-cpp<br>
-        <span class="gradient">native Bedrock client library</span>
-      </h1>
+<header>
+  <div class="header-inner">
+    <div class="logo">🧱 bedrock-protocol-cpp</div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#quickstart">Start</a>
+      <a href="#versions">Versions</a>
+      <a href="#docs">Docs</a>
+      <a href="https://github.com/M9CHKO/bedrock-protocol-cpp">GitHub</a>
+    </nav>
+  </div>
+</header>
 
-      <p class="subtitle">
-        A modern C++20 client library for the Minecraft Bedrock protocol.
-        Built for bot projects, packet handling, RakNet networking,
-        authentication, encryption and protocol experimentation.
-      </p>
+<main>
 
-      <div class="buttons">
-        <a class="btn primary" href="https://github.com/M9CHKO/bedrock-protocol-cpp">View on GitHub</a>
-        <a class="btn secondary" href="https://github.com/M9CHKO/bedrock-protocol-cpp/tree/main/documentation">Documentation</a>
-      </div>
+<section class="hero">
+  <div>
+    <span class="badge">C++20 Minecraft Bedrock Protocol Library</span>
+    <h1>Build fast Minecraft Bedrock bots in modern C++.</h1>
+    <p>
+      A C++20 library for Minecraft Bedrock Edition with RakNet networking,
+      Xbox authentication, packet serialization, relay tools, chunk foundations
+      and version registry support.
+    </p>
+    <div class="buttons">
+      <a class="btn primary" href="https://github.com/M9CHKO/bedrock-protocol-cpp">View on GitHub</a>
+      <a class="btn secondary" href="#docs">Read Docs</a>
     </div>
-  </header>
+  </div>
 
-  <section>
-    <h2 class="section-title">Designed for protocol work</h2>
-
-    <div class="grid">
-      <div class="card">
-        <h3>RakNet Networking</h3>
-        <p>Low-level networking foundation for Minecraft Bedrock connections.</p>
-      </div>
-
-      <div class="card">
-        <h3>Packet Serialization</h3>
-        <p>Read, write and experiment with Bedrock protocol packet structures.</p>
-      </div>
-
-      <div class="card">
-        <h3>Bot Projects</h3>
-        <p>Create native C++ bots with configurable host, port, version and username.</p>
-      </div>
-
-      <div class="card">
-        <h3>Multi-Version Focus</h3>
-        <p>Built with versioned protocol data and compatibility in mind.</p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2 class="section-title">Example</h2>
-
-    <div class="code">
-<pre>#include &lt;bedrock/bedrock.hpp&gt;
-#include &lt;iostream&gt;
+  <div class="terminal">
+    <div class="term-top">example.cpp</div>
+<pre><code>#include &lt;bedrock/bedrock.hpp&gt;
 
 int main() {
     auto client = bedrock::createClient({
@@ -217,33 +315,221 @@ int main() {
     });
 
     return client.run();
-}</pre>
+}</code></pre>
+  </div>
+</section>
+
+<section id="features">
+  <h2>Core Features</h2>
+  <p>Everything needed for bots, packet tools, relays and protocol experiments.</p>
+
+  <div class="grid">
+    <div class="card"><div class="icon">🌐</div><h3>RakNet Networking</h3><p>Bedrock connection flow, ping, handshake and packet transport.</p></div>
+    <div class="card"><div class="icon">🔐</div><h3>Xbox Auth</h3><p>Online login support with cached authentication data.</p></div>
+    <div class="card"><div class="icon">📦</div><h3>Packet System</h3><p>Read, write, debug and handle Bedrock packets.</p></div>
+    <div class="card"><div class="icon">🧩</div><h3>Version Registry</h3><p>Protocol data for many Minecraft Bedrock versions.</p></div>
+    <div class="card"><div class="icon">🗺️</div><h3>World / Chunks</h3><p>Chunk and world foundations for client-side world state.</p></div>
+    <div class="card"><div class="icon">🔁</div><h3>Relay Runtime</h3><p>Forward, cancel, replace and inspect packets live.</p></div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <h2>Quick Start</h2>
+  <p>Clone, build and run examples.</p>
+
+  <div class="two">
+    <div class="code-block">
+      <div class="term-top">Linux / Termux</div>
+<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
+cd bedrock-protocol-cpp
+./scripts/build.sh</code></pre>
     </div>
-  </section>
 
-  <section>
-    <h2 class="section-title">Project goals</h2>
+    <div class="code-block">
+      <div class="term-top">Windows PowerShell</div>
+<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
+cd bedrock-protocol-cpp
+.\scripts\build.ps1</code></pre>
+    </div>
+  </div>
+</section>
 
-    <div class="grid">
-      <div class="card">
-        <h3>Clean C++20 API</h3>
-        <p>Simple client creation, event handling and packet manipulation.</p>
+<section id="versions">
+  <h2>Supported Protocol Versions</h2>
+  <p>Compact list for Bedrock protocol compatibility.</p>
+
+  <div class="protocols">
+    <code>0.14.3 (70)</code> <code>0.15.6 (82)</code> <code>1.0.0 (100)</code>
+    <code>1.16.201 (422)</code> <code>1.16.210 (428)</code> <code>1.16.220 (431)</code>
+    <code>1.17.0 (440)</code> <code>1.17.10 (448)</code> <code>1.17.30 (465)</code>
+    <code>1.17.40 (471)</code> <code>1.18.0 (475)</code> <code>1.18.11 (486)</code>
+    <code>1.18.30 (503)</code> <code>1.19.1 (527)</code> <code>1.19.10 (534)</code>
+    <code>1.19.20 (544)</code> <code>1.19.21 (545)</code> <code>1.19.30 (554)</code>
+    <code>1.19.40 (557)</code> <code>1.19.50 (560)</code> <code>1.19.60 (567)</code>
+    <code>1.19.62 (567)</code> <code>1.19.63 (568)</code> <code>1.19.70 (575)</code>
+    <code>1.19.80 (582)</code> <code>1.20.0 (589)</code> <code>1.20.10 (594)</code>
+    <code>1.20.15 (594)</code> <code>1.20.30 (618)</code> <code>1.20.40 (622)</code>
+    <code>1.20.50 (630)</code> <code>1.20.61 (649)</code> <code>1.20.71 (662)</code>
+    <code>1.20.80 (671)</code> <code>1.21.0 (685)</code> <code>1.21.2 (686)</code>
+    <code>1.21.20 (712)</code> <code>1.21.30 (729)</code> <code>1.21.42 (748)</code>
+    <code>1.21.50 (766)</code> <code>1.21.60 (776)</code> <code>1.21.70 (786)</code>
+    <code>1.21.80 (800)</code> <code>1.21.90 (818)</code> <code>1.21.93 (819)</code>
+    <code>1.21.100 (827)</code> <code>1.21.111 (844)</code> <code>1.21.120 (859)</code>
+    <code>1.21.124 (860)</code> <code>1.21.130 (898)</code>
+    <code>1.26.0 (924)</code> <code>1.26.10 (944)</code> <code>1.26.20 (975)</code>
+  </div>
+</section>
+
+<section id="docs">
+  <h2>Documentation</h2>
+  <p>Built-in documentation for setup, client API, packets, relay and examples.</p>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <a href="#doc-install">Installation</a>
+      <a href="#doc-client">Client API</a>
+      <a href="#doc-events">Events</a>
+      <a href="#doc-packets">Packets</a>
+      <a href="#doc-auth">Authentication</a>
+      <a href="#doc-relay">Relay</a>
+      <a href="#doc-server">Server</a>
+      <a href="#doc-structure">Structure</a>
+      <a href="#doc-faq">FAQ</a>
+    </aside>
+
+    <div>
+      <div class="doc-panel" id="doc-install">
+        <h3>Installation</h3>
+        <p>Required tools: C++20 compiler, CMake, Ninja or Make, OpenSSL, zlib and curl.</p>
+<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
+cd bedrock-protocol-cpp
+./scripts/build.sh</code></pre>
       </div>
 
-      <div class="card">
-        <h3>Protocol Research</h3>
-        <p>A practical base for understanding and testing Bedrock networking.</p>
+      <div class="doc-panel" id="doc-client">
+        <h3>Client API</h3>
+        <p>Create a Bedrock client with host, port, username, version and auth mode.</p>
+<pre><code>auto client = bedrock::createClient({
+    .host = "cpe.ign.gg",
+    .port = 19132,
+    .username = "StewedV",
+    .version = "1.20.40",
+    .offline = false
+});
+
+client.run();</code></pre>
       </div>
 
-      <div class="card">
-        <h3>Open Source</h3>
-        <p>Built publicly for developers interested in Minecraft Bedrock internals.</p>
+      <div class="doc-panel" id="doc-events">
+        <h3>Events</h3>
+        <p>Subscribe to packet and connection events.</p>
+<pre><code>client.on("connect", []() {
+    std::cout &lt;&lt; "Connected\n";
+});
+
+client.on("start_game", [](const bedrock::Packet&amp; packet) {
+    std::cout &lt;&lt; "Start game received\n";
+});
+
+client.on("disconnect", []() {
+    std::cout &lt;&lt; "Disconnected\n";
+});</code></pre>
+      </div>
+
+      <div class="doc-panel" id="doc-packets">
+        <h3>Packet Writing</h3>
+        <p>Send packets by name or id using the protocol registry.</p>
+<pre><code>client.write("request_chunk_radius", {
+    {"chunk_radius", 8},
+    {"max_radius", 8}
+});
+
+client.write("text", {
+    {"type", "chat"},
+    {"message", "Hello from C++ bot!"}
+});</code></pre>
+      </div>
+
+      <div class="doc-panel" id="doc-auth">
+        <h3>Authentication</h3>
+        <p>Offline mode is useful for local test servers. Online mode uses Xbox authentication.</p>
+<pre><code>// Local / offline server
+.offline = true
+
+// Public online server
+.offline = false</code></pre>
+      </div>
+
+      <div class="doc-panel" id="doc-relay">
+        <h3>Relay API</h3>
+        <p>Relay mode can inspect, forward, cancel or replace packets between client and server.</p>
+<pre><code>relay.onClientbound("text", [](auto&amp; packet) {
+    std::cout &lt;&lt; "Server message\n";
+});
+
+relay.onServerbound("move_player", [](auto&amp; packet) {
+    std::cout &lt;&lt; "Player moved\n";
+});</code></pre>
+      </div>
+
+      <div class="doc-panel" id="doc-server">
+        <h3>Simple Server</h3>
+        <p>The repository also contains simple server examples for testing and protocol experiments.</p>
+<pre><code>auto server = bedrock::createServer({
+    .host = "0.0.0.0",
+    .port = 19132,
+    .motd = "C++ Bedrock Server"
+});
+
+server.listen();</code></pre>
+      </div>
+
+      <div class="doc-panel" id="doc-structure">
+        <h3>Project Structure</h3>
+        <ul>
+          <li><b>include/bedrock</b> — public headers.</li>
+          <li><b>src</b> — core implementation.</li>
+          <li><b>examples</b> — ready-to-run examples.</li>
+          <li><b>docs</b> — documentation files.</li>
+          <li><b>data</b> — protocol and registry data.</li>
+          <li><b>scripts</b> — build scripts.</li>
+        </ul>
+      </div>
+
+      <div class="doc-panel" id="doc-faq">
+        <h3>FAQ</h3>
+
+        <details>
+          <summary>Can it connect to public servers?</summary>
+          <p>Yes, online mode is intended for real Bedrock servers with Xbox authentication.</p>
+        </details>
+
+        <details>
+          <summary>Can it be used in Termux?</summary>
+          <p>Yes, if the required C++ build tools and libraries are installed.</p>
+        </details>
+
+        <details>
+          <summary>Does it support many Minecraft versions?</summary>
+          <p>Yes, the library includes a version registry and protocol mappings for many Bedrock versions.</p>
+        </details>
+
+        <details>
+          <summary>Is it only a bot library?</summary>
+          <p>No. It can also be used for packet debugging, relay tools, protocol experiments and server-side tests.</p>
+        </details>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <footer>
-    © 2026 bedrock-protocol-cpp — Minecraft Bedrock Protocol Client Library for C++20
-  </footer>
+</main>
+
+<footer>
+  <b>bedrock-protocol-cpp</b><br>
+  Minecraft Bedrock Protocol Client Library for C++20<br>
+  Built for bots, relays, packet experiments and protocol research.
+</footer>
+
 </body>
 </html>

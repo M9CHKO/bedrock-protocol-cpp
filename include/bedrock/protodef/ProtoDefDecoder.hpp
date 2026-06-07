@@ -12,6 +12,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace bedrock {
@@ -46,6 +47,21 @@ public:
 
         if (startsWith(type, "[\"array\"")) {
             decodeArray(type, reader, path, out, context);
+            return;
+        }
+
+        if (startsWith(type, "[\"endOfArray\"")) {
+            decodeEndOfArray(type, reader, path, out, context);
+            return;
+        }
+
+        if (startsWith(type, "[\"entityMetadataLoop\"")) {
+            decodeEntityMetadataLoop(type, reader, path, out, context);
+            return;
+        }
+
+        if (startsWith(type, "[\"count\"")) {
+            decodeCount(type, reader, path, out, context);
             return;
         }
 
@@ -158,7 +174,7 @@ private:
         return out;
     }
 
-    static std::string readVarUInt128String(ProtoDefReader& reader) {
+    static unsigned __int128 readVarUInt128(ProtoDefReader& reader) {
         unsigned __int128 result = 0;
         int shift = 0;
 
@@ -169,7 +185,7 @@ private:
             result |= (part << shift);
 
             if ((byte & 0x80) == 0) {
-                return uint128ToString(result);
+                return result;
             }
 
             shift += 7;
@@ -179,6 +195,10 @@ private:
         }
 
         throw std::runtime_error("varint128 too long");
+    }
+
+    static std::string readVarUInt128String(ProtoDefReader& reader) {
+        return uint128ToString(readVarUInt128(reader));
     }
 
 
@@ -327,12 +347,26 @@ private:
         std::vector<ProtoDefField>& out,
         ProtoDefContext& context
     ) const {
+        auto fixedCount = readJsonIntegerField(bufferJson, "count");
+        auto countRef = readJsonStringField(bufferJson, "count");
         auto countType = readJsonStringField(bufferJson, "countType").value_or("varint");
 
         const std::size_t start = reader.offset();
 
         int64_t count = 0;
-        if (countType == "u8") {
+        if (fixedCount.has_value()) {
+            count = static_cast<int64_t>(*fixedCount);
+        } else if (countRef.has_value()) {
+            std::string countPath = resolveComparePath(path, *countRef);
+            std::string raw = context.get(countPath);
+            if (raw.empty()) raw = context.get(*countRef);
+            if (raw.empty()) {
+                throw std::runtime_error("buffer count field not found: " + countPath);
+            }
+            auto slash = raw.find('/');
+            if (slash != std::string::npos) raw = raw.substr(0, slash);
+            count = std::stoll(raw);
+        } else if (countType == "u8") {
             count = reader.u8();
         } else if (countType == "u16" || countType == "lu16" || countType == "li16") {
             count = reader.u16le();
@@ -356,13 +390,32 @@ private:
 
         ProtoDefField field;
         field.path = path.empty() ? "$buffer" : path;
-        field.type = "buffer<" + countType + ">";
+        field.type = fixedCount.has_value()
+            ? "buffer<count:" + std::to_string(*fixedCount) + ">"
+            : countRef.has_value()
+                ? "buffer<count:" + *countRef + ">"
+                : "buffer<" + countType + ">";
         field.value = "<Buffer bytes:" + std::to_string(count) + ">";
         field.offset = start;
         field.size = reader.offset() - start;
 
         out.push_back(field);
         context.set(field.path, field.value);
+    }
+
+    void decodeCount(
+        const std::string& countJson,
+        ProtoDefReader& reader,
+        const std::string& path,
+        std::vector<ProtoDefField>& out,
+        ProtoDefContext& context
+    ) const {
+        auto type = readJsonValueField(countJson, "type");
+        if (!type.has_value()) {
+            throw std::runtime_error("count type not found");
+        }
+
+        decode(*type, reader, path.empty() ? "$count" : path, out, context);
     }
 
     void decodePString(
@@ -574,6 +627,7 @@ private:
         std::vector<ProtoDefField>& out,
         ProtoDefContext& context
     ) const {
+        auto fixedCount = readJsonIntegerField(arrayJson, "count");
         auto countRef = readJsonStringField(arrayJson, "count");
         auto countType = readJsonStringField(arrayJson, "countType").value_or("varint");
         auto itemType = readJsonValueField(arrayJson, "type");
@@ -587,7 +641,9 @@ private:
         int64_t count = 0;
         bool countWasRead = false;
 
-        if (countRef.has_value()) {
+        if (fixedCount.has_value()) {
+            count = static_cast<int64_t>(*fixedCount);
+        } else if (countRef.has_value()) {
             std::string countPath = resolveComparePath(path, *countRef);
             std::string raw = context.get(countPath);
             if (raw.empty()) {
@@ -637,9 +693,11 @@ private:
 
         ProtoDefField countField;
         countField.path = path.empty() ? "$count" : path + ".$count";
-        countField.type = countRef.has_value()
-            ? "array_count_ref<" + *countRef + ">"
-            : "array_count<" + countType + ">";
+        countField.type = fixedCount.has_value()
+            ? "array_count_fixed<" + std::to_string(*fixedCount) + ">"
+            : countRef.has_value()
+                ? "array_count_ref<" + *countRef + ">"
+                : "array_count<" + countType + ">";
         countField.value = std::to_string(count);
         countField.offset = start;
         countField.size = countWasRead ? reader.offset() - start : 0;
@@ -653,6 +711,58 @@ private:
             } catch (const std::exception& e) {
                 throw std::runtime_error("at " + childPath + ": " + e.what());
             }
+        }
+    }
+
+    void decodeEndOfArray(
+        const std::string& arrayJson,
+        ProtoDefReader& reader,
+        const std::string& path,
+        std::vector<ProtoDefField>& out,
+        ProtoDefContext& context
+    ) const {
+        auto itemType = readJsonValueField(arrayJson, "type");
+        if (!itemType.has_value()) {
+            throw std::runtime_error("endOfArray item type not found");
+        }
+
+        int64_t index = 0;
+        while (reader.remaining() > 0) {
+            decode(*itemType, reader, path + "[" + std::to_string(index++) + "]", out, context);
+        }
+    }
+
+    void decodeEntityMetadataLoop(
+        const std::string& metadataJson,
+        ProtoDefReader& reader,
+        const std::string& path,
+        std::vector<ProtoDefField>& out,
+        ProtoDefContext& context
+    ) const {
+        auto itemType = readJsonValueField(metadataJson, "type");
+        auto endVal = readJsonIntegerField(metadataJson, "endVal").value_or(0x7f);
+        if (!itemType.has_value()) {
+            throw std::runtime_error("entityMetadataLoop item type not found");
+        }
+
+        int64_t index = 0;
+        while (true) {
+            std::size_t before = reader.offset();
+            uint8_t marker = reader.u8();
+            if (marker == static_cast<uint8_t>(endVal)) {
+                ProtoDefField field;
+                field.path = path.empty() ? "$metadata_end" : path + ".$end";
+                field.type = "entityMetadataLoop_end";
+                field.value = std::to_string(endVal);
+                field.offset = before;
+                field.size = 1;
+                out.push_back(field);
+                context.set(field.path, field.value);
+                return;
+            }
+
+            reader.rewindTo(before);
+            decode(*itemType, reader, path + "[" + std::to_string(index++) + "]", out, context);
         }
     }
 
@@ -719,18 +829,23 @@ private:
         field.type = "bitflags";
         field.offset = reader.offset();
 
-        uint64_t value = 0;
+        unsigned __int128 value = 0;
         if (baseType == "u8") value = reader.u8();
         else if (baseType == "u16" || baseType == "lu16" || baseType == "li16") value = reader.u16le();
         else if (baseType == "u32" || baseType == "lu32" || baseType == "li32") value = reader.u32le();
         else if (baseType == "lu64" || baseType == "li64") value = reader.readU64LE();
+        else if (baseType == "varint128") value = readVarUInt128(reader);
         else value = reader.varuint32();
 
-        field.value = std::to_string(value);
+        field.value = uint128ToString(value);
         field.size = reader.offset() - field.offset;
 
         out.push_back(field);
         context.set(path, field.value);
+
+        for (const auto& [name, bit] : readBitflagValues(bitflagsJson)) {
+            context.set(path.empty() ? name : path + "." + name, (value & bit) != 0 ? "true" : "false");
+        }
     }
 
     void decodeTypeName(
@@ -764,6 +879,27 @@ private:
                 hex.push_back(digits[b & 0x0f]);
             }
             field.value = hex;
+        } else if (typeName == "ipAddress") {
+            field.value =
+                std::to_string(reader.u8()) + "." +
+                std::to_string(reader.u8()) + "." +
+                std::to_string(reader.u8()) + "." +
+                std::to_string(reader.u8());
+        } else if (typeName == "restBuffer" || typeName == "MapInfo") {
+            const auto count = reader.remaining();
+            reader.skip(count);
+            field.value = "<Buffer bytes:" + std::to_string(count) + ">";
+        } else if (typeName == "byterot") {
+            field.value = std::to_string(static_cast<double>(reader.u8()) * (360.0 / 256.0));
+        } else if (typeName == "nbtLoop") {
+            while (reader.remaining() > 0) {
+                std::size_t before = reader.offset();
+                uint8_t tag = reader.u8();
+                if (tag == 0) break;
+                reader.rewindTo(before);
+                skipNativeNbt(reader);
+            }
+            field.value = "<nbtLoop>";
         } else if (typeName == "u8" || typeName == "byte") {
             if (reader.remaining() < 1) {
                 field.value = "<missing:u8>";
@@ -952,6 +1088,60 @@ private:
         return keys;
     }
 
+    static std::unordered_map<std::string, unsigned __int128> readBitflagValues(const std::string& bitflagsJson) {
+        std::unordered_map<std::string, unsigned __int128> out;
+        auto flagsValue = readJsonValueField(bitflagsJson, "flags");
+        if (!flagsValue.has_value()) return out;
+
+        const std::string flags = trim(*flagsValue);
+        if (flags.empty()) return out;
+
+        if (flags[0] == '[') {
+            std::size_t pos = 0;
+            unsigned __int128 bit = 1;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                out[flags.substr(q1 + 1, q2 - q1 - 1)] = bit;
+                bit <<= 1;
+                pos = q2 + 1;
+            }
+            return out;
+        }
+
+        if (flags[0] == '{') {
+            std::size_t pos = 0;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                std::string name = flags.substr(q1 + 1, q2 - q1 - 1);
+
+                auto colon = flags.find(':', q2 + 1);
+                if (colon == std::string::npos) break;
+                std::size_t n = colon + 1;
+                while (n < flags.size() && std::isspace(static_cast<unsigned char>(flags[n]))) ++n;
+                std::size_t e = n;
+                while (e < flags.size() && std::isdigit(static_cast<unsigned char>(flags[e]))) ++e;
+                out[name] = parseUint128(flags.substr(n, e - n));
+                pos = e;
+            }
+        }
+
+        return out;
+    }
+
+    static unsigned __int128 parseUint128(const std::string& text) {
+        unsigned __int128 out = 0;
+        for (char c : text) {
+            if (c < '0' || c > '9') continue;
+            out = out * 10 + static_cast<unsigned __int128>(c - '0');
+        }
+        return out;
+    }
 
     static std::optional<std::string> readMapperValue(
         const std::string& mapperJson,
@@ -1010,6 +1200,25 @@ private:
         auto normalized = trim(*value);
         if (!isJsonString(normalized)) return std::nullopt;
         return unquote(normalized);
+    }
+
+    static std::optional<std::size_t> readJsonIntegerField(
+        const std::string& json,
+        const std::string& key
+    ) {
+        auto value = readJsonValueField(json, key);
+        if (!value.has_value()) return std::nullopt;
+
+        auto normalized = trim(*value);
+        if (normalized.empty() || normalized.front() == '"') return std::nullopt;
+
+        std::size_t end = 0;
+        while (end < normalized.size() && std::isdigit(static_cast<unsigned char>(normalized[end]))) {
+            ++end;
+        }
+
+        if (end == 0) return std::nullopt;
+        return static_cast<std::size_t>(std::stoull(normalized.substr(0, end)));
     }
 
     static std::optional<std::string> readJsonValueField(

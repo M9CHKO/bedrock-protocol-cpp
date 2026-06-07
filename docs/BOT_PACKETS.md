@@ -111,6 +111,33 @@ client.write("move_player", bedrock::object({
 }));
 ```
 
+Bitflags can be passed as an object, which matches the JavaScript `protodef` shape:
+
+```cpp
+client.write("player_auth_input", bedrock::object({
+    {"pitch", bedrock::f32(0.0f)},
+    {"yaw", bedrock::f32(0.0f)},
+    {"position", bedrock::object({{"x", bedrock::f32(0.0f)}, {"y", bedrock::f32(64.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"move_vector", bedrock::object({{"x", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"head_yaw", bedrock::f32(0.0f)},
+    {"input_data", bedrock::object({
+        {"item_interact", bedrock::boolean(false)},
+        {"block_action", bedrock::boolean(false)},
+        {"item_stack_request", bedrock::boolean(false)},
+        {"client_predicted_vehicle", bedrock::boolean(false)}
+    })},
+    {"input_mode", bedrock::str("mouse")},
+    {"play_mode", bedrock::str("normal")},
+    {"interaction_model", bedrock::str("classic")},
+    {"interact_rotation", bedrock::object({{"x", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"tick", bedrock::u64(1)},
+    {"delta", bedrock::object({{"x", bedrock::f32(0.0f)}, {"y", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"analogue_move_vector", bedrock::object({{"x", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"camera_orientation", bedrock::object({{"x", bedrock::f32(0.0f)}, {"y", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})},
+    {"raw_move_vector", bedrock::object({{"x", bedrock::f32(0.0f)}, {"z", bedrock::f32(0.0f)}})}
+}));
+```
+
 Some packet shapes change between versions. For example, `text` in newer versions has extra `category`/filtered-message fields. Always use the schema for the version selected in `createClient()`.
 
 You can inspect queued packets:

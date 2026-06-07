@@ -57,6 +57,21 @@ public:
             return;
         }
 
+        if (startsWith(type, "[\"endOfArray\"")) {
+            encodeEndOfArray(type, value, writer);
+            return;
+        }
+
+        if (startsWith(type, "[\"entityMetadataLoop\"")) {
+            encodeEntityMetadataLoop(type, value, writer);
+            return;
+        }
+
+        if (startsWith(type, "[\"count\"")) {
+            encodeCount(type, value, writer);
+            return;
+        }
+
         if (startsWith(type, "[\"option\"")) {
             encodeOption(type, value, writer);
             return;
@@ -121,9 +136,18 @@ private:
             throw std::runtime_error("buffer encode expects bytes");
         }
 
+        auto fixedCount = readJsonIntegerField(bufferJson, "count");
         auto countRef = readJsonStringField(bufferJson, "count");
 
-        if (!countRef.has_value()) {
+        if (fixedCount.has_value()) {
+            if (value.bytesValue.size() != *fixedCount) {
+                throw std::runtime_error(
+                    "buffer encode fixed count mismatch: expected " +
+                    std::to_string(*fixedCount) + ", got " +
+                    std::to_string(value.bytesValue.size())
+                );
+            }
+        } else if (!countRef.has_value()) {
             auto countType =
                 readJsonStringField(bufferJson, "countType")
                     .value_or("varint");
@@ -177,6 +201,32 @@ private:
     }
 
 
+    void encodeCount(
+        const std::string& countJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        auto countFor = readJsonStringField(countJson, "countFor");
+        auto type = readJsonValueField(countJson, "type");
+        if (!type.has_value()) {
+            throw std::runtime_error("count encode type not found");
+        }
+
+        std::size_t count = 0;
+        if (countFor.has_value()) {
+            const ProtoDefValue* target = getPath(value, *countFor);
+            if (!target) {
+                throw std::runtime_error("count encode missing countFor field: " + *countFor);
+            }
+            count = valueLength(*target);
+        } else {
+            count = static_cast<std::size_t>(asUInt(value));
+        }
+
+        encode(*type, ProtoDefValue::uinteger(count), writer);
+    }
+
+
     void encodeArray(
         const std::string& arrayJson,
         const ProtoDefValue& value,
@@ -191,9 +241,18 @@ private:
             throw std::runtime_error("array encode item type not found");
         }
 
-        // count:"field" означает, что count уже закодирован отдельным полем.
+        // count:"field" or count:123 means the length is already known.
+        auto fixedCount = readJsonIntegerField(arrayJson, "count");
         auto countRef = readJsonStringField(arrayJson, "count");
-        if (!countRef.has_value()) {
+        if (fixedCount.has_value()) {
+            if (value.arrayValue.size() != *fixedCount) {
+                throw std::runtime_error(
+                    "array encode fixed count mismatch: expected " +
+                    std::to_string(*fixedCount) + ", got " +
+                    std::to_string(value.arrayValue.size())
+                );
+            }
+        } else if (!countRef.has_value()) {
             auto countType = readJsonStringField(arrayJson, "countType").value_or("varint");
             writeCount(countType, value.arrayValue.size(), writer);
         }
@@ -201,6 +260,46 @@ private:
         for (const auto& item : value.arrayValue) {
             encode(*itemType, item, writer);
         }
+    }
+
+    void encodeEndOfArray(
+        const std::string& arrayJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        if (value.kind != ProtoDefValue::Kind::Array) {
+            throw std::runtime_error("endOfArray encode expects array");
+        }
+
+        auto itemType = readJsonValueField(arrayJson, "type");
+        if (!itemType.has_value()) {
+            throw std::runtime_error("endOfArray encode item type not found");
+        }
+
+        for (const auto& item : value.arrayValue) {
+            encode(*itemType, item, writer);
+        }
+    }
+
+    void encodeEntityMetadataLoop(
+        const std::string& metadataJson,
+        const ProtoDefValue& value,
+        ProtoDefWriter& writer
+    ) const {
+        if (value.kind != ProtoDefValue::Kind::Array) {
+            throw std::runtime_error("entityMetadataLoop encode expects array");
+        }
+
+        auto itemType = readJsonValueField(metadataJson, "type");
+        auto endVal = readJsonIntegerField(metadataJson, "endVal").value_or(0x7f);
+        if (!itemType.has_value()) {
+            throw std::runtime_error("entityMetadataLoop encode item type not found");
+        }
+
+        for (const auto& item : value.arrayValue) {
+            encode(*itemType, item, writer);
+        }
+        writer.u8(static_cast<uint8_t>(endVal));
     }
 
     void writeCount(
@@ -244,6 +343,14 @@ private:
         }
 
         throw std::runtime_error("array encode unsupported countType: " + countType);
+    }
+
+    static std::size_t valueLength(const ProtoDefValue& value) {
+        if (value.kind == ProtoDefValue::Kind::Array) return value.arrayValue.size();
+        if (value.kind == ProtoDefValue::Kind::Bytes) return value.bytesValue.size();
+        if (value.kind == ProtoDefValue::Kind::String) return value.stringValue.size();
+        if (value.kind == ProtoDefValue::Kind::Object) return value.objectValue.size();
+        throw std::runtime_error("count encode target has no length");
     }
 
 
@@ -405,6 +512,11 @@ private:
 
         if (typeName == "uuid") {
             writeUuid(asString(value), writer);
+            return;
+        }
+
+        if (typeName == "ipAddress") {
+            writeIpAddress(asString(value), writer);
             return;
         }
 
@@ -858,6 +970,33 @@ private:
         }
     }
 
+    static void writeIpAddress(const std::string& value, ProtoDefWriter& writer) {
+        std::size_t start = 0;
+        for (int i = 0; i < 4; ++i) {
+            auto dot = value.find('.', start);
+            std::string part = dot == std::string::npos
+                ? value.substr(start)
+                : value.substr(start, dot - start);
+            if (part.empty()) {
+                throw std::runtime_error("ipAddress encode invalid address");
+            }
+            int octet = std::stoi(part);
+            if (octet < 0 || octet > 255) {
+                throw std::runtime_error("ipAddress encode octet out of range");
+            }
+            writer.u8(static_cast<uint8_t>(octet));
+            if (dot == std::string::npos) {
+                if (i != 3) throw std::runtime_error("ipAddress encode expects 4 octets");
+                start = value.size();
+            } else {
+                start = dot + 1;
+            }
+        }
+        if (start < value.size()) {
+            throw std::runtime_error("ipAddress encode expects 4 octets");
+        }
+    }
+
     void encodeBitflags(
         const std::string& bitflagsJson,
         const ProtoDefValue& value,
@@ -865,7 +1004,7 @@ private:
     ) const {
         auto baseType = readJsonStringField(bitflagsJson, "type").value_or("varint");
 
-        uint64_t mask = 0;
+        unsigned __int128 mask = 0;
         if (value.kind == ProtoDefValue::Kind::Object) {
             if (const ProtoDefValue* raw = value.get("_value")) {
                 mask = asUInt(*raw);
@@ -880,7 +1019,7 @@ private:
         ) {
             mask = asUInt(value);
         } else if (value.kind == ProtoDefValue::Kind::Array) {
-            auto flags = readBitflagValues(bitflagsJson);
+            auto flags = readBitflagValues128(bitflagsJson);
             for (const auto& item : value.arrayValue) {
                 const std::string& name = asString(item);
                 auto it = flags.find(name);
@@ -890,9 +1029,9 @@ private:
                 mask |= it->second;
             }
         } else if (value.kind == ProtoDefValue::Kind::Object) {
-            auto flags = readBitflagValues(bitflagsJson);
+            auto flags = readBitflagValues128(bitflagsJson);
             for (const auto& [name, enabled] : value.objectValue) {
-                if (name == "_value") continue;
+                if (name == "_value" || name == ".." || name == "$value") continue;
                 if (!asBool(enabled)) continue;
                 auto it = flags.find(name);
                 if (it == flags.end()) {
@@ -904,7 +1043,62 @@ private:
             throw std::runtime_error("bitflags encode expects number, array, or object");
         }
 
-        encodeTypeName(baseType, ProtoDefValue::uinteger(mask), writer);
+        if (baseType == "varint128") {
+            writer.varuint128(mask);
+            return;
+        }
+
+        if (mask > static_cast<unsigned __int128>(UINT64_MAX)) {
+            throw std::runtime_error("bitflags mask does not fit " + baseType);
+        }
+
+        encodeTypeName(baseType, ProtoDefValue::uinteger(static_cast<uint64_t>(mask)), writer);
+    }
+
+    static std::unordered_map<std::string, unsigned __int128> readBitflagValues128(const std::string& bitflagsJson) {
+        std::unordered_map<std::string, unsigned __int128> out;
+        auto flagsValue = readJsonValueField(bitflagsJson, "flags");
+        if (!flagsValue.has_value()) return out;
+
+        const std::string flags = trim(*flagsValue);
+        if (flags.empty()) return out;
+
+        if (flags[0] == '[') {
+            std::size_t pos = 0;
+            unsigned __int128 bit = 1;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                out[flags.substr(q1 + 1, q2 - q1 - 1)] = bit;
+                bit <<= 1;
+                pos = q2 + 1;
+            }
+            return out;
+        }
+
+        if (flags[0] == '{') {
+            std::size_t pos = 0;
+            while (true) {
+                auto q1 = flags.find('"', pos);
+                if (q1 == std::string::npos) break;
+                auto q2 = flags.find('"', q1 + 1);
+                if (q2 == std::string::npos) break;
+                std::string name = flags.substr(q1 + 1, q2 - q1 - 1);
+
+                auto colon = flags.find(':', q2 + 1);
+                if (colon == std::string::npos) break;
+                std::size_t n = colon + 1;
+                while (n < flags.size() && std::isspace(static_cast<unsigned char>(flags[n]))) ++n;
+                std::size_t e = n;
+                while (e < flags.size() && std::isdigit(static_cast<unsigned char>(flags[e]))) ++e;
+                out[name] = parseUint128(flags.substr(n, e - n));
+                pos = e;
+            }
+        }
+
+        return out;
     }
 
     static std::unordered_map<std::string, uint64_t> readBitflagValues(const std::string& bitflagsJson) {
@@ -950,6 +1144,15 @@ private:
             }
         }
 
+        return out;
+    }
+
+    static unsigned __int128 parseUint128(const std::string& text) {
+        unsigned __int128 out = 0;
+        for (char c : text) {
+            if (c < '0' || c > '9') continue;
+            out = out * 10 + static_cast<unsigned __int128>(c - '0');
+        }
         return out;
     }
 
@@ -1201,42 +1404,45 @@ private:
         const std::string& json,
         const std::string& key
     ) {
-        std::string needle = "\"" + key + "\"";
-        auto p = json.find(needle);
-        if (p == std::string::npos) return std::nullopt;
+        auto value = readJsonValueField(json, key);
+        if (!value.has_value()) return std::nullopt;
 
-        auto colon = json.find(':', p + needle.size());
-        if (colon == std::string::npos) return std::nullopt;
-
-        auto q1 = json.find('"', colon + 1);
-        if (q1 == std::string::npos) return std::nullopt;
-
-        auto q2 = json.find('"', q1 + 1);
-        if (q2 == std::string::npos) return std::nullopt;
-
-        return json.substr(q1 + 1, q2 - q1 - 1);
+        std::string normalized = trim(*value);
+        if (!isJsonString(normalized)) return std::nullopt;
+        return unquote(normalized);
     }
 
     static std::optional<bool> readJsonBoolField(
         const std::string& json,
         const std::string& key
     ) {
-        std::string needle = "\"" + key + "\"";
-        auto p = json.find(needle);
-        if (p == std::string::npos) return std::nullopt;
+        auto value = readJsonValueField(json, key);
+        if (!value.has_value()) return std::nullopt;
 
-        auto colon = json.find(':', p + needle.size());
-        if (colon == std::string::npos) return std::nullopt;
-
-        std::size_t a = colon + 1;
-        while (a < json.size() && std::isspace(static_cast<unsigned char>(json[a]))) {
-            ++a;
-        }
-
-        if (json.compare(a, 4, "true") == 0) return true;
-        if (json.compare(a, 5, "false") == 0) return false;
+        std::string normalized = trim(*value);
+        if (normalized == "true") return true;
+        if (normalized == "false") return false;
 
         return std::nullopt;
+    }
+
+    static std::optional<std::size_t> readJsonIntegerField(
+        const std::string& json,
+        const std::string& key
+    ) {
+        auto value = readJsonValueField(json, key);
+        if (!value.has_value()) return std::nullopt;
+
+        std::string normalized = trim(*value);
+        if (normalized.empty() || normalized.front() == '"') return std::nullopt;
+
+        std::size_t end = 0;
+        while (end < normalized.size() && std::isdigit(static_cast<unsigned char>(normalized[end]))) {
+            ++end;
+        }
+
+        if (end == 0) return std::nullopt;
+        return static_cast<std::size_t>(std::stoull(normalized.substr(0, end)));
     }
 
     static std::optional<std::string> readJsonValueField(
@@ -1275,7 +1481,16 @@ private:
             return json.substr(a, b - a + 1);
         }
 
-        return std::nullopt;
+        std::size_t b = a;
+        while (b < json.size() && json[b] != ',' && json[b] != '}' && json[b] != ']') {
+            ++b;
+        }
+
+        while (b > a && std::isspace(static_cast<unsigned char>(json[b - 1]))) {
+            --b;
+        }
+
+        return json.substr(a, b - a);
     }
 
     static std::size_t findMatching(

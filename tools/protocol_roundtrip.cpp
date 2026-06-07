@@ -1,8 +1,11 @@
 #include <bedrock/BedrockFramer.hpp>
 #include <bedrock/protocol/ProtocolDefinition.hpp>
 #include <bedrock/protocol/VersionedPacketCodec.hpp>
+#include <bedrock/protodef/ProtoDefEncoder.hpp>
 #include <bedrock/protodef/ProtoDefPacketEncoder.hpp>
+#include <bedrock/protodef/ProtoDefPacketDecoder.hpp>
 #include <bedrock/protodef/ProtoDefValue.hpp>
+#include <bedrock/protodef/ProtoDefWriter.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -117,6 +120,93 @@ bedrock::ProtoDefValue array(std::vector<bedrock::ProtoDefValue> values = {}) {
     return bedrock::ProtoDefValue::array(std::move(values));
 }
 
+bedrock::ProtoDefValue vec2f(double x, double z) {
+    return object({
+        {"x", bedrock::ProtoDefValue::floating(x)},
+        {"z", bedrock::ProtoDefValue::floating(z)}
+    });
+}
+
+bedrock::ProtoDefValue vec3f(double x, double y, double z) {
+    return object({
+        {"x", bedrock::ProtoDefValue::floating(x)},
+        {"y", bedrock::ProtoDefValue::floating(y)},
+        {"z", bedrock::ProtoDefValue::floating(z)}
+    });
+}
+
+bedrock::ProtoDefValue inputFlags(std::initializer_list<std::string> enabled = {}) {
+    auto flags = object({
+        {"item_interact", bedrock::ProtoDefValue::boolean(false)},
+        {"block_action", bedrock::ProtoDefValue::boolean(false)},
+        {"item_stack_request", bedrock::ProtoDefValue::boolean(false)},
+        {"client_predicted_vehicle", bedrock::ProtoDefValue::boolean(false)}
+    });
+
+    for (const auto& name : enabled) {
+        flags.objectValue[name] = bedrock::ProtoDefValue::boolean(true);
+    }
+
+    return flags;
+}
+
+bool checkProtoDefNativeHelpers() {
+    bool ok = true;
+    bedrock::ProtoDefEncoder encoder;
+
+    auto expectBytes = [&](const std::string& label, const std::string& typeJson, const bedrock::ProtoDefValue& value, std::vector<uint8_t> expected) {
+        try {
+            bedrock::ProtoDefWriter writer;
+            encoder.encode(typeJson, value, writer);
+            auto actual = writer.take();
+            if (!sameBytes(actual, expected)) {
+                std::cerr << "[FAIL] protodef helper " << label << " byte mismatch\n";
+                ok = false;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[FAIL] protodef helper " << label << ": " << e.what() << "\n";
+            ok = false;
+        }
+    };
+
+    expectBytes(
+        "fixed-buffer",
+        "[\"buffer\",{\"count\":4}]",
+        bedrock::ProtoDefValue::bytes({1, 2, 3, 4}),
+        {1, 2, 3, 4}
+    );
+
+    expectBytes(
+        "ipAddress",
+        "\"ipAddress\"",
+        bedrock::ProtoDefValue::string("127.0.0.1"),
+        {127, 0, 0, 1}
+    );
+
+    expectBytes(
+        "endOfArray",
+        "[\"endOfArray\",{\"type\":\"u8\"}]",
+        array({bedrock::ProtoDefValue::uinteger(7), bedrock::ProtoDefValue::uinteger(8)}),
+        {7, 8}
+    );
+
+    expectBytes(
+        "entityMetadataLoop",
+        "[\"entityMetadataLoop\",{\"type\":\"u8\",\"endVal\":127}]",
+        array({bedrock::ProtoDefValue::uinteger(1), bedrock::ProtoDefValue::uinteger(2)}),
+        {1, 2, 127}
+    );
+
+    expectBytes(
+        "varint128-bitflags",
+        "[\"bitflags\",{\"type\":\"varint128\",\"flags\":[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\",\"i\",\"j\",\"k\",\"l\",\"m\",\"n\",\"o\",\"p\",\"q\",\"r\",\"s\",\"t\",\"u\",\"v\",\"w\",\"x\",\"y\",\"z\",\"aa\",\"ab\",\"ac\",\"ad\",\"ae\",\"af\",\"ag\",\"ah\",\"ai\",\"aj\",\"ak\",\"al\",\"am\",\"an\",\"ao\",\"ap\",\"aq\",\"ar\",\"as\",\"at\",\"au\",\"av\",\"aw\",\"ax\",\"ay\",\"az\",\"ba\",\"bb\",\"bc\",\"bd\",\"be\",\"bf\",\"bg\",\"bh\",\"bi\",\"bj\",\"bk\",\"bl\",\"bm\"]}]",
+        array({bedrock::ProtoDefValue::string("bl")}),
+        {0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01}
+    );
+
+    return ok;
+}
+
 bool checkSchemaEncode(
     const std::string& version,
     const std::string& packetName,
@@ -137,6 +227,9 @@ bool checkSchemaEncode(
             std::cerr << "[FAIL] " << version << " schema encode " << packetName << " mismatch\n";
             return false;
         }
+
+        bedrock::ProtoDefPacketDecoder decoder(version);
+        (void) decoder.decodePacket(packetName, payload);
     } catch (const std::exception& e) {
         std::cerr << "[FAIL] " << version << " schema encode " << packetName << ": " << e.what() << "\n";
         return false;
@@ -206,6 +299,35 @@ bool checkSchemaEncodes(const std::string& version) {
     }
     ok = checkSchemaEncode(version, "move_player", movePlayer) && ok;
 
+    ok = checkSchemaEncode(version, "player_auth_input", object({
+        {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+        {"yaw", bedrock::ProtoDefValue::floating(0.0)},
+        {"position", vec3f(0.0, 64.0, 0.0)},
+        {"move_vector", vec2f(0.0, 0.0)},
+        {"head_yaw", bedrock::ProtoDefValue::floating(0.0)},
+        {"input_data", inputFlags()},
+        {"input_mode", bedrock::ProtoDefValue::string("mouse")},
+        {"play_mode", bedrock::ProtoDefValue::string("normal")},
+        {"interaction_model", bedrock::ProtoDefValue::string("classic")},
+        {"interact_rotation", vec2f(0.0, 0.0)},
+        {"tick", bedrock::ProtoDefValue::uinteger(1)},
+        {"delta", vec3f(0.0, 0.0, 0.0)},
+        {"analogue_move_vector", vec2f(0.0, 0.0)},
+        {"camera_orientation", vec3f(0.0, 0.0, 0.0)},
+        {"raw_move_vector", vec2f(0.0, 0.0)}
+    })) && ok;
+
+    ok = checkSchemaEncode(version, "move_entity", object({
+        {"runtime_entity_id", bedrock::ProtoDefValue::uinteger(1)},
+        {"flags", bedrock::ProtoDefValue::uinteger(0)},
+        {"position", vec3f(0.0, 64.0, 0.0)},
+        {"rotation", object({
+            {"yaw", bedrock::ProtoDefValue::floating(90.0)},
+            {"pitch", bedrock::ProtoDefValue::floating(0.0)},
+            {"head_yaw", bedrock::ProtoDefValue::floating(90.0)}
+        })}
+    })) && ok;
+
     return ok;
 }
 
@@ -222,6 +344,10 @@ int main() {
 
     int checkedVersions = 0;
     int failures = 0;
+
+    if (!checkProtoDefNativeHelpers()) {
+        ++failures;
+    }
 
     for (const auto& version : bedrock::ProtocolDefinition::versions()) {
         if (!versionAtLeast(version, "1.20.0")) {

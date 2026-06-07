@@ -1,6 +1,6 @@
 # Relay API
 
-The C++ relay API follows the packet event model from JavaScript `bedrock-protocol/src/relay.js`:
+The C++ relay API follows the packet event model from:
 
 - `serverbound`: downstream client to upstream server.
 - `clientbound`: upstream server to downstream client.

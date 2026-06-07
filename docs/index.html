@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bedrock-protocol-cpp</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bedrock-protocol-cpp Docs</title>
 
 <style>
 :root{
   --bg:#070b14;
+  --bg2:#0b1220;
   --card:#101827;
   --card2:#0d1322;
   --text:#e6edf3;
@@ -15,7 +16,9 @@
   --green:#3fb950;
   --blue:#58a6ff;
   --orange:#f0883e;
+  --red:#ff7b72;
   --border:#243044;
+  --code:#050911;
 }
 
 *{box-sizing:border-box}
@@ -23,149 +26,455 @@ html{scroll-behavior:smooth}
 
 body{
   margin:0;
-  font-family:Segoe UI,Arial,sans-serif;
+  font-family:Inter,Segoe UI,Arial,sans-serif;
   background:
-    radial-gradient(circle at top left,#15325c 0,#070b14 34%),
-    radial-gradient(circle at top right,#17442a 0,#070b14 30%);
+    radial-gradient(circle at top left,#15325c 0,#070b14 32%),
+    radial-gradient(circle at top right,#17442a 0,#070b14 28%),
+    var(--bg);
   color:var(--text);
 }
 
-a{text-decoration:none;color:inherit}
+a{color:inherit;text-decoration:none}
 
 header{
   position:sticky;
   top:0;
-  z-index:99;
-  backdrop-filter:blur(16px);
-  background:rgba(7,11,20,.82);
+  z-index:100;
+  backdrop-filter:blur(18px);
+  background:rgba(7,11,20,.84);
   border-bottom:1px solid var(--border);
 }
 
 .header-inner{
-  max-width:1200px;
+  max-width:1400px;
   margin:auto;
-  padding:18px 24px;
+  padding:16px 22px;
   display:flex;
   justify-content:space-between;
   align-items:center;
+  gap:16px;
 }
 
-.logo{font-size:20px;font-weight:900}
-nav a{margin-left:20px;color:var(--muted);font-weight:700;font-size:14px}
-nav a:hover{color:#fff}
-
-section{
-  max-width:1200px;
-  margin:auto;
-  padding:70px 24px;
+.logo{
+  font-weight:950;
+  letter-spacing:-.4px;
+  font-size:20px;
 }
 
-.hero{
-  display:grid;
-  grid-template-columns:1.1fr .9fr;
-  gap:35px;
-  align-items:center;
-  min-height:78vh;
-}
-
-.badge{
-  display:inline-block;
-  padding:8px 14px;
-  border:1px solid var(--border);
-  border-radius:999px;
-  color:var(--green);
-  background:rgba(63,185,80,.08);
-  font-weight:800;
-}
-
-h1{
-  font-size:58px;
-  line-height:1.02;
-  margin:20px 0;
-  letter-spacing:-2px;
-}
-
-h2{
-  font-size:36px;
-  margin:0 0 14px;
-}
-
-p,li{
-  color:var(--muted);
-  line-height:1.7;
-}
-
-.hero p{font-size:19px}
-
-.buttons{
+nav{
   display:flex;
   gap:14px;
   flex-wrap:wrap;
-  margin-top:28px;
+}
+
+nav a{
+  color:var(--muted);
+  font-weight:800;
+  font-size:14px;
+  padding:8px 10px;
+  border-radius:10px;
+}
+
+nav a:hover{
+  color:white;
+  background:#151f33;
+}
+
+.hero{
+  max-width:1400px;
+  margin:auto;
+  padding:70px 22px 42px;
+  display:grid;
+  grid-template-columns:1.05fr .95fr;
+  gap:32px;
+  align-items:center;
+}
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:var(--green);
+  background:rgba(63,185,80,.08);
+  border:1px solid rgba(63,185,80,.28);
+  border-radius:999px;
+  padding:8px 14px;
+  font-weight:900;
+  font-size:13px;
+}
+
+h1{
+  font-size:60px;
+  line-height:1.02;
+  margin:18px 0;
+  letter-spacing:-2.5px;
+}
+
+.hero p{
+  color:var(--muted);
+  font-size:19px;
+  line-height:1.7;
+  max-width:760px;
+}
+
+.buttons{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:26px;
 }
 
 .btn{
-  padding:14px 18px;
-  border-radius:12px;
-  font-weight:900;
   border:1px solid var(--border);
+  border-radius:13px;
+  padding:13px 17px;
+  font-weight:950;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
 }
 
-.primary{background:var(--green);color:#06120a}
-.secondary{background:#111827;color:white}
+.btn.primary{
+  background:linear-gradient(135deg,var(--green),#2ea043);
+  color:#06120a;
+  border-color:transparent;
+}
 
-.terminal,.code-block{
-  background:#050911;
+.btn.secondary{
+  background:#111827;
+  color:white;
+}
+
+.preview-card{
+  background:linear-gradient(180deg,#101827,#0b1220);
   border:1px solid var(--border);
-  border-radius:20px;
-  overflow:hidden;
+  border-radius:24px;
+  padding:22px;
   box-shadow:0 30px 90px rgba(0,0,0,.35);
 }
 
-.term-top{
-  background:#0f172a;
-  padding:14px;
-  border-bottom:1px solid var(--border);
-  color:var(--muted);
-  font-weight:800;
+.stats{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:14px;
 }
 
-pre{
-  margin:0;
-  padding:22px;
-  overflow:auto;
-  color:#d1f7d6;
-  font-size:14px;
-  line-height:1.6;
+.stat{
+  background:#0d1322;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:18px;
+}
+
+.stat b{
+  display:block;
+  font-size:28px;
+  color:white;
+}
+
+.stat span{
+  color:var(--muted);
+  font-weight:700;
+}
+
+section{
+  max-width:1400px;
+  margin:auto;
+  padding:45px 22px;
+}
+
+.section-title{
+  font-size:36px;
+  margin:0 0 10px;
+  letter-spacing:-1px;
+}
+
+.section-sub{
+  color:var(--muted);
+  margin:0 0 24px;
+  line-height:1.7;
 }
 
 .grid{
   display:grid;
   grid-template-columns:repeat(3,1fr);
-  gap:18px;
+  gap:16px;
 }
 
 .card{
   background:linear-gradient(180deg,var(--card),var(--card2));
   border:1px solid var(--border);
-  border-radius:18px;
-  padding:24px;
+  border-radius:20px;
+  padding:22px;
 }
 
-.card h3{margin-top:0;color:white}
-.icon{font-size:30px;margin-bottom:10px}
+.card h3{
+  margin:0 0 10px;
+  color:white;
+}
 
-.two{
+.card p{
+  color:var(--muted);
+  line-height:1.65;
+}
+
+.icon{
+  font-size:30px;
+  margin-bottom:10px;
+}
+
+.docs-shell{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
+  grid-template-columns:320px 1fr;
+  gap:22px;
+  align-items:start;
+}
+
+.sidebar{
+  position:sticky;
+  top:82px;
+  background:rgba(13,19,34,.88);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:16px;
+  max-height:calc(100vh - 100px);
+  overflow:auto;
+}
+
+.sidebar h3{
+  margin:4px 8px 14px;
+  font-size:16px;
+}
+
+.search{
+  width:100%;
+  background:#050911;
+  border:1px solid var(--border);
+  color:white;
+  padding:12px 13px;
+  border-radius:13px;
+  outline:none;
+  margin-bottom:12px;
+  font-weight:700;
+}
+
+.doc-btn{
+  width:100%;
+  text-align:left;
+  background:transparent;
+  border:0;
+  color:var(--muted);
+  padding:12px;
+  border-radius:13px;
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  margin-bottom:5px;
+}
+
+.doc-btn:hover{
+  background:#151f33;
+  color:white;
+}
+
+.doc-btn.active{
+  background:linear-gradient(135deg,rgba(63,185,80,.22),rgba(88,166,255,.12));
+  color:white;
+  border:1px solid rgba(63,185,80,.35);
+}
+
+.doc-btn b{
+  font-size:14px;
+}
+
+.doc-btn span{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.reader{
+  min-height:700px;
+  background:#0b1220;
+  border:1px solid var(--border);
+  border-radius:24px;
+  overflow:hidden;
+  box-shadow:0 30px 90px rgba(0,0,0,.28);
+}
+
+.reader-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:16px 18px;
+  background:#0f172a;
+  border-bottom:1px solid var(--border);
+  position:sticky;
+  top:65px;
+  z-index:50;
+}
+
+.reader-title{
+  min-width:0;
+}
+
+.reader-title b{
+  display:block;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.reader-title span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  margin-top:3px;
+}
+
+.reader-actions{
+  display:flex;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.small-btn{
+  border:1px solid var(--border);
+  background:#111827;
+  color:white;
+  border-radius:11px;
+  padding:9px 11px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+.small-btn:hover{
+  background:#1c2740;
+}
+
+.article{
+  padding:34px;
+  line-height:1.75;
+}
+
+.article h1,
+.article h2,
+.article h3,
+.article h4{
+  color:white;
+  line-height:1.25;
+  letter-spacing:-.5px;
+}
+
+.article h1{
+  font-size:42px;
+  border-bottom:1px solid var(--border);
+  padding-bottom:16px;
+}
+
+.article h2{
+  margin-top:42px;
+  font-size:30px;
+  border-bottom:1px solid var(--border);
+  padding-bottom:10px;
+}
+
+.article h3{
+  margin-top:30px;
+  font-size:23px;
+}
+
+.article p,
+.article li{
+  color:#c9d1d9;
+}
+
+.article a{
+  color:var(--blue);
+  font-weight:800;
+}
+
+.article code{
+  background:#151f33;
+  border:1px solid #253552;
+  color:#d1f7d6;
+  padding:3px 6px;
+  border-radius:7px;
+  font-size:.92em;
+}
+
+.article pre{
+  background:#050911;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:18px;
+  overflow:auto;
+  position:relative;
+}
+
+.article pre code{
+  background:transparent;
+  border:0;
+  padding:0;
+  color:#d1f7d6;
+}
+
+.article blockquote{
+  margin:18px 0;
+  padding:14px 18px;
+  border-left:4px solid var(--blue);
+  background:#0d1322;
+  color:#c9d1d9;
+  border-radius:0 12px 12px 0;
+}
+
+.article table{
+  width:100%;
+  border-collapse:collapse;
+  margin:18px 0;
+  overflow:hidden;
+  border-radius:14px;
+  display:block;
+  overflow-x:auto;
+}
+
+.article th,
+.article td{
+  border:1px solid var(--border);
+  padding:10px 12px;
+}
+
+.article th{
+  background:#15213a;
+  color:white;
+}
+
+.article tr:nth-child(even) td{
+  background:#0d1322;
+}
+
+.loading{
+  padding:40px;
+  color:var(--muted);
+  font-weight:900;
+}
+
+.error{
+  padding:30px;
+  margin:30px;
+  background:rgba(255,123,114,.08);
+  border:1px solid rgba(255,123,114,.3);
+  border-radius:18px;
+  color:#ffd7d4;
 }
 
 .protocols{
   background:#0b1220;
   border:1px solid var(--border);
-  border-radius:18px;
-  padding:20px;
+  border-radius:20px;
+  padding:18px;
   line-height:2.35;
 }
 
@@ -178,89 +487,38 @@ pre{
   white-space:nowrap;
 }
 
-.docs-layout{
-  display:grid;
-  grid-template-columns:260px 1fr;
-  gap:24px;
-}
-
-.docs-sidebar{
-  position:sticky;
-  top:90px;
-  align-self:start;
-  background:#0d1322;
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:16px;
-}
-
-.docs-sidebar a{
-  display:block;
-  padding:11px 12px;
-  color:var(--muted);
-  border-radius:10px;
-  font-weight:800;
-  font-size:14px;
-}
-
-.docs-sidebar a:hover{
-  background:#151f33;
-  color:#fff;
-}
-
-.doc-panel{
-  background:linear-gradient(180deg,#101827,#0b1220);
-  border:1px solid var(--border);
-  border-radius:20px;
-  padding:26px;
-  margin-bottom:18px;
-}
-
-.doc-panel h3{
-  margin-top:0;
-  font-size:25px;
-}
-
-.copy-btn{
-  float:right;
-  background:#238636;
-  color:white;
-  border:0;
-  padding:8px 12px;
-  border-radius:10px;
-  font-weight:900;
-  cursor:pointer;
-}
-
-.copy-btn:hover{background:#2ea043}
-
-details{
-  background:#0d1322;
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:16px;
-  margin-bottom:12px;
-}
-
-summary{
-  cursor:pointer;
-  color:#fff;
-  font-weight:900;
-}
-
 footer{
   text-align:center;
-  padding:50px 24px;
-  color:var(--muted);
+  padding:45px 22px;
   background:#050911;
   border-top:1px solid var(--border);
+  color:var(--muted);
 }
 
-@media(max-width:900px){
-  .hero,.grid,.two,.docs-layout{grid-template-columns:1fr}
+@media(max-width:980px){
+  .hero,
+  .docs-shell,
+  .grid{
+    grid-template-columns:1fr;
+  }
+
   h1{font-size:42px}
+
+  .sidebar{
+    position:relative;
+    top:0;
+    max-height:none;
+  }
+
+  .reader-top{
+    top:0;
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
   nav{display:none}
-  .docs-sidebar{position:relative;top:0}
+
+  .article{padding:22px}
 }
 </style>
 </head>
@@ -269,13 +527,12 @@ footer{
 
 <header>
   <div class="header-inner">
-    <div class="logo">🧱 bedrock-protocol-cpp</div>
+    <a class="logo" href="#">🧱 bedrock-protocol-cpp</a>
     <nav>
       <a href="#features">Features</a>
-      <a href="#quickstart">Start</a>
+      <a href="#docs">Documentation</a>
       <a href="#versions">Versions</a>
-      <a href="#docs">Docs</a>
-      <a href="https://github.com/M9CHKO/bedrock-protocol-cpp">GitHub</a>
+      <a href="https://github.com/M9CHKO/bedrock-protocol-cpp" target="_blank">GitHub</a>
     </nav>
   </div>
 </header>
@@ -284,79 +541,114 @@ footer{
 
 <section class="hero">
   <div>
-    <span class="badge">C++20 Minecraft Bedrock Protocol Library</span>
-    <h1>Build fast Minecraft Bedrock bots in modern C++.</h1>
+    <span class="badge">📘 Live GitHub Docs Reader</span>
+    <h1>Modern documentation site for bedrock-protocol-cpp.</h1>
     <p>
-      A C++20 library for Minecraft Bedrock Edition with RakNet networking,
-      Xbox authentication, packet serialization, relay tools, chunk foundations
-      and version registry support.
+      This page loads documentation files directly from the repository,
+      renders Markdown beautifully, and gives users a clean docs experience
+      without leaving the website.
     </p>
+
     <div class="buttons">
-      <a class="btn primary" href="https://github.com/M9CHKO/bedrock-protocol-cpp">View on GitHub</a>
-      <a class="btn secondary" href="#docs">Read Docs</a>
+      <a class="btn primary" href="#docs">Open Documentation</a>
+      <a class="btn secondary" href="https://github.com/M9CHKO/bedrock-protocol-cpp" target="_blank">View Repository</a>
     </div>
   </div>
 
-  <div class="terminal">
-    <div class="term-top">example.cpp</div>
-<pre><code>#include &lt;bedrock/bedrock.hpp&gt;
-
-int main() {
-    auto client = bedrock::createClient({
-        .host = "localhost",
-        .port = 19132,
-        .username = "Bot",
-        .version = "1.20.40",
-        .offline = true
-    });
-
-    client.on("start_game", [](const bedrock::Packet&) {
-        std::cout &lt;&lt; "Joined world\n";
-    });
-
-    return client.run();
-}</code></pre>
+  <div class="preview-card">
+    <div class="stats">
+      <div class="stat"><b>C++20</b><span>Modern native client library</span></div>
+      <div class="stat"><b>RakNet</b><span>Bedrock networking core</span></div>
+      <div class="stat"><b>Xbox</b><span>Online authentication support</span></div>
+      <div class="stat"><b>Docs</b><span>Markdown files rendered live</span></div>
+    </div>
   </div>
 </section>
 
 <section id="features">
-  <h2>Core Features</h2>
-  <p>Everything needed for bots, packet tools, relays and protocol experiments.</p>
+  <h2 class="section-title">Project Overview</h2>
+  <p class="section-sub">
+    Minecraft Bedrock Protocol Client Library for C++20 with Xbox Authentication,
+    RakNet Networking and Packet Serialization.
+  </p>
 
   <div class="grid">
-    <div class="card"><div class="icon">🌐</div><h3>RakNet Networking</h3><p>Bedrock connection flow, ping, handshake and packet transport.</p></div>
-    <div class="card"><div class="icon">🔐</div><h3>Xbox Auth</h3><p>Online login support with cached authentication data.</p></div>
-    <div class="card"><div class="icon">📦</div><h3>Packet System</h3><p>Read, write, debug and handle Bedrock packets.</p></div>
-    <div class="card"><div class="icon">🧩</div><h3>Version Registry</h3><p>Protocol data for many Minecraft Bedrock versions.</p></div>
-    <div class="card"><div class="icon">🗺️</div><h3>World / Chunks</h3><p>Chunk and world foundations for client-side world state.</p></div>
-    <div class="card"><div class="icon">🔁</div><h3>Relay Runtime</h3><p>Forward, cancel, replace and inspect packets live.</p></div>
+    <div class="card">
+      <div class="icon">🌐</div>
+      <h3>RakNet Networking</h3>
+      <p>Ping, connect, handshake and MCPE packet transport foundation.</p>
+    </div>
+
+    <div class="card">
+      <div class="icon">🔐</div>
+      <h3>Xbox Authentication</h3>
+      <p>Online login with profile cache and interactive device-code auth.</p>
+    </div>
+
+    <div class="card">
+      <div class="icon">📦</div>
+      <h3>Packet Serialization</h3>
+      <p>Schema-shaped packet reading and writing across bundled versions.</p>
+    </div>
+
+    <div class="card">
+      <div class="icon">🔁</div>
+      <h3>Relay Runtime</h3>
+      <p>Inspect, cancel, replace and forward packets between client and server.</p>
+    </div>
+
+    <div class="card">
+      <div class="icon">🗺️</div>
+      <h3>World / Chunks</h3>
+      <p>Level chunk decoding foundation and tracked client world state.</p>
+    </div>
+
+    <div class="card">
+      <div class="icon">🧩</div>
+      <h3>Version Registry</h3>
+      <p>Bundled protocol data for many Minecraft Bedrock versions.</p>
+    </div>
   </div>
 </section>
 
-<section id="quickstart">
-  <h2>Quick Start</h2>
-  <p>Clone, build and run examples.</p>
+<section id="docs">
+  <h2 class="section-title">Documentation</h2>
+  <p class="section-sub">
+    Click any file. The site downloads the Markdown from GitHub and renders it here.
+  </p>
 
-  <div class="two">
-    <div class="code-block">
-      <div class="term-top">Linux / Termux</div>
-<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
-cd bedrock-protocol-cpp
-./scripts/build.sh</code></pre>
-    </div>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <h3>Documentation Files</h3>
+      <input id="docSearch" class="search" placeholder="Search docs..." />
 
-    <div class="code-block">
-      <div class="term-top">Windows PowerShell</div>
-<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
-cd bedrock-protocol-cpp
-.\scripts\build.ps1</code></pre>
-    </div>
+      <div id="docList"></div>
+    </aside>
+
+    <article class="reader">
+      <div class="reader-top">
+        <div class="reader-title">
+          <b id="currentTitle">README.md</b>
+          <span id="currentPath">README.md</span>
+        </div>
+
+        <div class="reader-actions">
+          <button class="small-btn" onclick="copyCurrentLink()">Copy link</button>
+          <button class="small-btn" onclick="openRaw()">Raw</button>
+          <button class="small-btn" onclick="openGithub()">GitHub</button>
+        </div>
+      </div>
+
+      <div id="article" class="article">
+        <div class="loading">Loading documentation...</div>
+      </div>
+    </article>
   </div>
 </section>
 
 <section id="versions">
-  <h2>Supported Protocol Versions</h2>
-  <p>Compact list for Bedrock protocol compatibility.</p>
+  <h2 class="section-title">Supported Protocol Versions</h2>
+  <p class="section-sub">Compact protocol list from the repository README.</p>
 
   <div class="protocols">
     <code>0.14.3 (70)</code> <code>0.15.6 (82)</code> <code>1.0.0 (100)</code>
@@ -380,156 +672,296 @@ cd bedrock-protocol-cpp
   </div>
 </section>
 
-<section id="docs">
-  <h2>Documentation</h2>
-  <p>Built-in documentation for setup, client API, packets, relay and examples.</p>
-
-  <div class="docs-layout">
-    <aside class="docs-sidebar">
-      <a href="#doc-install">Installation</a>
-      <a href="#doc-client">Client API</a>
-      <a href="#doc-events">Events</a>
-      <a href="#doc-packets">Packets</a>
-      <a href="#doc-auth">Authentication</a>
-      <a href="#doc-relay">Relay</a>
-      <a href="#doc-server">Server</a>
-      <a href="#doc-structure">Structure</a>
-      <a href="#doc-faq">FAQ</a>
-    </aside>
-
-    <div>
-      <div class="doc-panel" id="doc-install">
-        <h3>Installation</h3>
-        <p>Required tools: C++20 compiler, CMake, Ninja or Make, OpenSSL, zlib and curl.</p>
-<pre><code>git clone https://github.com/M9CHKO/bedrock-protocol-cpp.git
-cd bedrock-protocol-cpp
-./scripts/build.sh</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-client">
-        <h3>Client API</h3>
-        <p>Create a Bedrock client with host, port, username, version and auth mode.</p>
-<pre><code>auto client = bedrock::createClient({
-    .host = "cpe.ign.gg",
-    .port = 19132,
-    .username = "StewedV",
-    .version = "1.20.40",
-    .offline = false
-});
-
-client.run();</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-events">
-        <h3>Events</h3>
-        <p>Subscribe to packet and connection events.</p>
-<pre><code>client.on("connect", []() {
-    std::cout &lt;&lt; "Connected\n";
-});
-
-client.on("start_game", [](const bedrock::Packet&amp; packet) {
-    std::cout &lt;&lt; "Start game received\n";
-});
-
-client.on("disconnect", []() {
-    std::cout &lt;&lt; "Disconnected\n";
-});</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-packets">
-        <h3>Packet Writing</h3>
-        <p>Send packets by name or id using the protocol registry.</p>
-<pre><code>client.write("request_chunk_radius", {
-    {"chunk_radius", 8},
-    {"max_radius", 8}
-});
-
-client.write("text", {
-    {"type", "chat"},
-    {"message", "Hello from C++ bot!"}
-});</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-auth">
-        <h3>Authentication</h3>
-        <p>Offline mode is useful for local test servers. Online mode uses Xbox authentication.</p>
-<pre><code>// Local / offline server
-.offline = true
-
-// Public online server
-.offline = false</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-relay">
-        <h3>Relay API</h3>
-        <p>Relay mode can inspect, forward, cancel or replace packets between client and server.</p>
-<pre><code>relay.onClientbound("text", [](auto&amp; packet) {
-    std::cout &lt;&lt; "Server message\n";
-});
-
-relay.onServerbound("move_player", [](auto&amp; packet) {
-    std::cout &lt;&lt; "Player moved\n";
-});</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-server">
-        <h3>Simple Server</h3>
-        <p>The repository also contains simple server examples for testing and protocol experiments.</p>
-<pre><code>auto server = bedrock::createServer({
-    .host = "0.0.0.0",
-    .port = 19132,
-    .motd = "C++ Bedrock Server"
-});
-
-server.listen();</code></pre>
-      </div>
-
-      <div class="doc-panel" id="doc-structure">
-        <h3>Project Structure</h3>
-        <ul>
-          <li><b>include/bedrock</b> — public headers.</li>
-          <li><b>src</b> — core implementation.</li>
-          <li><b>examples</b> — ready-to-run examples.</li>
-          <li><b>docs</b> — documentation files.</li>
-          <li><b>data</b> — protocol and registry data.</li>
-          <li><b>scripts</b> — build scripts.</li>
-        </ul>
-      </div>
-
-      <div class="doc-panel" id="doc-faq">
-        <h3>FAQ</h3>
-
-        <details>
-          <summary>Can it connect to public servers?</summary>
-          <p>Yes, online mode is intended for real Bedrock servers with Xbox authentication.</p>
-        </details>
-
-        <details>
-          <summary>Can it be used in Termux?</summary>
-          <p>Yes, if the required C++ build tools and libraries are installed.</p>
-        </details>
-
-        <details>
-          <summary>Does it support many Minecraft versions?</summary>
-          <p>Yes, the library includes a version registry and protocol mappings for many Bedrock versions.</p>
-        </details>
-
-        <details>
-          <summary>Is it only a bot library?</summary>
-          <p>No. It can also be used for packet debugging, relay tools, protocol experiments and server-side tests.</p>
-        </details>
-      </div>
-    </div>
-  </div>
-</section>
-
 </main>
 
 <footer>
   <b>bedrock-protocol-cpp</b><br>
-  Minecraft Bedrock Protocol Client Library for C++20<br>
-  Built for bots, relays, packet experiments and protocol research.
+  Live documentation site powered by Markdown files from GitHub.
 </footer>
+
+<script>
+const OWNER = "M9CHKO";
+const REPO = "bedrock-protocol-cpp";
+const BRANCH = "main";
+
+const DOCS = [
+  {
+    title: "README",
+    path: "README.md",
+    desc: "Main project overview, features, quick start and examples"
+  },
+  {
+    title: "Supported Versions",
+    path: "documentation/VERSIONS.md",
+    desc: "Version table and protocol compatibility notes"
+  },
+  {
+    title: "Getting Started",
+    path: "documentation/GETTING_STARTED.md",
+    desc: "Beginner setup and first bot project"
+  },
+  {
+    title: "Bot Packet Examples",
+    path: "documentation/BOT_PACKETS.md",
+    desc: "Examples for writing and handling packets"
+  },
+  {
+    title: "Relay API",
+    path: "documentation/RELAY.md",
+    desc: "Relay server, clientbound and serverbound hooks"
+  },
+  {
+    title: "Packet Documentation",
+    path: "documentation/PACKETS.md",
+    desc: "Packet schema notes and packet usage"
+  },
+  {
+    title: "JavaScript Parity Roadmap",
+    path: "documentation/PARITY_ROADMAP.md",
+    desc: "Roadmap toward bedrock-protocol parity"
+  },
+  {
+    title: "Updating The Library",
+    path: "documentation/MAINTENANCE.md",
+    desc: "Maintenance and update workflow"
+  }
+];
+
+let currentDoc = DOCS[0];
+
+function rawUrl(path){
+  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}`;
+}
+
+function githubUrl(path){
+  return `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${path}`;
+}
+
+function escapeHtml(str){
+  return str
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;");
+}
+
+function inlineMarkdown(text){
+  text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, `<img alt="$1" src="$2">`);
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, url) => {
+    if(url.startsWith("#")) return `<a href="${url}">${label}</a>`;
+    if(url.endsWith(".md") || url.includes(".md#")){
+      const clean = url.replace("./","").split("#")[0];
+      const found = DOCS.find(d => d.path.endsWith(clean) || clean.endsWith(d.path));
+      if(found) return `<a href="#docs" onclick="loadDocByPath('${found.path}')">${label}</a>`;
+    }
+    return `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
+  });
+
+  text = text.replace(/`([^`]+)`/g, `<code>$1</code>`);
+  text = text.replace(/\*\*([^*]+)\*\*/g, `<strong>$1</strong>`);
+  text = text.replace(/\*([^*]+)\*/g, `<em>$1</em>`);
+  return text;
+}
+
+function markdownToHtml(md){
+  md = md.replace(/\r\n/g,"\n");
+
+  const codeBlocks = [];
+  md = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+    const id = `@@CODE${codeBlocks.length}@@`;
+    codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+    return id;
+  });
+
+  md = md.replace(/^( {4}|\t)(.*(?:\n(?: {4}|\t).*)*)/gm, block => {
+    const code = block.split("\n").map(line => line.replace(/^( {4}|\t)/,"")).join("\n");
+    const id = `@@CODE${codeBlocks.length}@@`;
+    codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+    return id;
+  });
+
+  const lines = md.split("\n");
+  let html = "";
+  let inList = false;
+  let inTable = false;
+  let tableRows = [];
+
+  function closeList(){
+    if(inList){
+      html += "</ul>";
+      inList = false;
+    }
+  }
+
+  function closeTable(){
+    if(inTable){
+      html += "<table>";
+      tableRows.forEach((row, i) => {
+        const cells = row.split("|").slice(1,-1).map(c => c.trim());
+        if(i === 0){
+          html += "<thead><tr>" + cells.map(c => `<th>${inlineMarkdown(c)}</th>`).join("") + "</tr></thead><tbody>";
+        }else if(!cells.every(c => /^:?-{3,}:?$/.test(c))){
+          html += "<tr>" + cells.map(c => `<td>${inlineMarkdown(c)}</td>`).join("") + "</tr>";
+        }
+      });
+      html += "</tbody></table>";
+      tableRows = [];
+      inTable = false;
+    }
+  }
+
+  for(let rawLine of lines){
+    let line = rawLine.trimEnd();
+
+    if(line.startsWith("@@CODE")){
+      closeList();
+      closeTable();
+      html += line;
+      continue;
+    }
+
+    if(/^\|.*\|$/.test(line)){
+      closeList();
+      inTable = true;
+      tableRows.push(line);
+      continue;
+    }else{
+      closeTable();
+    }
+
+    if(/^#{1,6}\s/.test(line)){
+      closeList();
+      const level = line.match(/^#+/)[0].length;
+      const text = line.replace(/^#{1,6}\s/,"");
+      const slug = text.toLowerCase().replace(/[^\wа-яё]+/gi,"-").replace(/^-|-$/g,"");
+      html += `<h${level} id="${slug}">${inlineMarkdown(text)}</h${level}>`;
+      continue;
+    }
+
+    if(/^[-*]\s+/.test(line)){
+      if(!inList){
+        html += "<ul>";
+        inList = true;
+      }
+      html += `<li>${inlineMarkdown(line.replace(/^[-*]\s+/,""))}</li>`;
+      continue;
+    }
+
+    if(/^>\s?/.test(line)){
+      closeList();
+      html += `<blockquote>${inlineMarkdown(line.replace(/^>\s?/,""))}</blockquote>`;
+      continue;
+    }
+
+    if(line.trim() === ""){
+      closeList();
+      continue;
+    }
+
+    closeList();
+    html += `<p>${inlineMarkdown(line)}</p>`;
+  }
+
+  closeList();
+  closeTable();
+
+  codeBlocks.forEach((block, i) => {
+    html = html.replace(`@@CODE${i}@@`, block);
+  });
+
+  return html;
+}
+
+function renderDocList(filter = ""){
+  const list = document.getElementById("docList");
+  list.innerHTML = "";
+
+  DOCS
+    .filter(doc =>
+      doc.title.toLowerCase().includes(filter.toLowerCase()) ||
+      doc.path.toLowerCase().includes(filter.toLowerCase()) ||
+      doc.desc.toLowerCase().includes(filter.toLowerCase())
+    )
+    .forEach(doc => {
+      const btn = document.createElement("button");
+      btn.className = "doc-btn" + (doc.path === currentDoc.path ? " active" : "");
+      btn.innerHTML = `<b>${doc.title}</b><span>${doc.path}</span><span>${doc.desc}</span>`;
+      btn.onclick = () => loadDoc(doc);
+      list.appendChild(btn);
+    });
+}
+
+async function loadDoc(doc){
+  currentDoc = doc;
+  renderDocList(document.getElementById("docSearch").value);
+
+  document.getElementById("currentTitle").textContent = doc.title;
+  document.getElementById("currentPath").textContent = doc.path;
+  document.getElementById("article").innerHTML = `<div class="loading">Loading ${doc.path}...</div>`;
+
+  try{
+    const res = await fetch(rawUrl(doc.path), { cache:"no-store" });
+
+    if(!res.ok){
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const md = await res.text();
+    document.getElementById("article").innerHTML = markdownToHtml(md);
+    history.replaceState(null, "", `#docs/${encodeURIComponent(doc.path)}`);
+  }catch(err){
+    document.getElementById("article").innerHTML = `
+      <div class="error">
+        <h3>Could not load this file</h3>
+        <p><b>${doc.path}</b></p>
+        <p>The file path may be different in the repository, or GitHub Pages cannot fetch it right now.</p>
+        <p>
+          <a href="${githubUrl(doc.path)}" target="_blank">Open on GitHub</a>
+          ·
+          <a href="${rawUrl(doc.path)}" target="_blank">Open raw file</a>
+        </p>
+      </div>
+    `;
+  }
+}
+
+function loadDocByPath(path){
+  const doc = DOCS.find(d => d.path === path);
+  if(doc) loadDoc(doc);
+}
+
+function openRaw(){
+  window.open(rawUrl(currentDoc.path), "_blank");
+}
+
+function openGithub(){
+  window.open(githubUrl(currentDoc.path), "_blank");
+}
+
+async function copyCurrentLink(){
+  const url = location.origin + location.pathname + `#docs/${encodeURIComponent(currentDoc.path)}`;
+  try{
+    await navigator.clipboard.writeText(url);
+    alert("Link copied");
+  }catch{
+    prompt("Copy link:", url);
+  }
+}
+
+document.getElementById("docSearch").addEventListener("input", e => {
+  renderDocList(e.target.value);
+});
+
+renderDocList();
+
+const hashMatch = location.hash.match(/^#docs\/(.+)$/);
+if(hashMatch){
+  const path = decodeURIComponent(hashMatch[1]);
+  const found = DOCS.find(d => d.path === path);
+  loadDoc(found || DOCS[0]);
+}else{
+  loadDoc(DOCS[0]);
+}
+</script>
 
 </body>
 </html>

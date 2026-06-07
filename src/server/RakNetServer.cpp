@@ -275,6 +275,10 @@ bool isOrdered(uint8_t reliability) {
 
 struct ParsedFrame {
     uint8_t reliability = 0;
+    bool split = false;
+    uint32_t splitCount = 0;
+    uint16_t splitId = 0;
+    uint32_t splitIndex = 0;
     std::vector<uint8_t> payload;
 };
 
@@ -294,7 +298,7 @@ std::vector<ParsedFrame> parseConnectedDatagram(
         ParsedFrame frame;
         const uint8_t flags = data[offset++];
         frame.reliability = static_cast<uint8_t>((flags & 0xe0u) >> 5u);
-        const bool split = (flags & 0x10u) != 0;
+        frame.split = (flags & 0x10u) != 0;
 
         const uint16_t bitLength = readU16BE(data, offset);
         std::size_t byteLength = (static_cast<std::size_t>(bitLength) + 7u) / 8u;
@@ -312,13 +316,25 @@ std::vector<ParsedFrame> parseConnectedDatagram(
             }
             ++offset;
         }
-        if (split) {
+        if (frame.split) {
             if (offset + 10 > data.size()) {
                 throw std::runtime_error("split header out of range");
             }
-            offset += 10;
+            frame.splitCount =
+                (static_cast<uint32_t>(data[offset]) << 24u) |
+                (static_cast<uint32_t>(data[offset + 1]) << 16u) |
+                (static_cast<uint32_t>(data[offset + 2]) << 8u) |
+                static_cast<uint32_t>(data[offset + 3]);
+            offset += 4;
+            frame.splitId = readU16BE(data, offset);
+            frame.splitIndex =
+                (static_cast<uint32_t>(data[offset]) << 24u) |
+                (static_cast<uint32_t>(data[offset + 1]) << 16u) |
+                (static_cast<uint32_t>(data[offset + 2]) << 8u) |
+                static_cast<uint32_t>(data[offset + 3]);
+            offset += 4;
         }
-        if (split && byteLength == 0) {
+        if (frame.split && byteLength == 0) {
             byteLength = data.size() - offset;
         }
         if (offset + byteLength > data.size()) {
@@ -600,13 +616,56 @@ void RakNetServer::handlePacket(
             }
 
             for (const auto& frame : frames) {
-                if (frame.payload.empty()) {
+                std::vector<uint8_t> payload = frame.payload;
+                if (frame.split) {
+                    if (frame.splitCount == 0 || frame.splitCount > 4096 || frame.splitIndex >= frame.splitCount) {
+                        continue;
+                    }
+
+                    bool complete = false;
+                    {
+                        std::lock_guard<std::mutex> lock(peersMutex_);
+                        auto& state = peers_[peerKey(senderAddr)];
+                        auto& split = state.splits[frame.splitId];
+                        if (split.count == 0) {
+                            split.count = frame.splitCount;
+                            split.parts.resize(frame.splitCount);
+                            split.received.resize(frame.splitCount, false);
+                        }
+
+                        if (split.count != frame.splitCount) {
+                            state.splits.erase(frame.splitId);
+                            continue;
+                        }
+
+                        auto index = static_cast<std::size_t>(frame.splitIndex);
+                        split.parts[index] = frame.payload;
+                        split.received[index] = true;
+                        complete = std::all_of(split.received.begin(), split.received.end(), [](bool value) {
+                            return value;
+                        });
+
+                        if (complete) {
+                            payload.clear();
+                            for (const auto& part : split.parts) {
+                                payload.insert(payload.end(), part.begin(), part.end());
+                            }
+                            state.splits.erase(frame.splitId);
+                        }
+                    }
+
+                    if (!complete) {
+                        continue;
+                    }
+                }
+
+                if (payload.empty()) {
                     continue;
                 }
 
-                if (frame.payload[0] == ID_CONNECTED_PING) {
+                if (payload[0] == ID_CONNECTED_PING) {
                     std::size_t offset = 1;
-                    const int64_t pingTime = static_cast<int64_t>(readU64BE(frame.payload, offset));
+                    const int64_t pingTime = static_cast<int64_t>(readU64BE(payload, offset));
                     sendReliableOrdered(
                         peer,
                         sender,
@@ -616,10 +675,10 @@ void RakNetServer::handlePacket(
                     continue;
                 }
 
-                if (frame.payload[0] == ID_CONNECTION_REQUEST) {
+                if (payload[0] == ID_CONNECTION_REQUEST) {
                     std::size_t offset = 1;
-                    const uint64_t clientGuid = readU64BE(frame.payload, offset);
-                    const int64_t requestTimestamp = static_cast<int64_t>(readU64BE(frame.payload, offset));
+                    const uint64_t clientGuid = readU64BE(payload, offset);
+                    const int64_t requestTimestamp = static_cast<int64_t>(readU64BE(payload, offset));
                     (void) clientGuid;
                     sendReliableOrdered(
                         peer,
@@ -631,7 +690,7 @@ void RakNetServer::handlePacket(
                 }
 
                 if (encapsulatedHandler_) {
-                    encapsulatedHandler_(peer, frame.payload);
+                    encapsulatedHandler_(peer, payload);
                 }
             }
             return;
@@ -686,6 +745,62 @@ void RakNetServer::sendReliableOrdered(
     const std::vector<uint8_t>& payload
 ) {
     if (payload.empty()) {
+        return;
+    }
+
+    const std::size_t maxPayloadPerDatagram = static_cast<std::size_t>(
+        std::max(128, peer.mtu > 0 ? peer.mtu - 100 : 1200)
+    );
+
+    if (payload.size() > maxPayloadPerDatagram) {
+        uint32_t splitCount = static_cast<uint32_t>(
+            (payload.size() + maxPayloadPerDatagram - 1u) / maxPayloadPerDatagram
+        );
+
+        uint32_t sharedOrderedIndex = 0;
+        uint16_t splitId = 0;
+        {
+            std::lock_guard<std::mutex> lock(peersMutex_);
+            auto& state = peers_[peer.address + ":" + std::to_string(peer.port)];
+            sharedOrderedIndex = state.orderedIndex++;
+            splitId = state.outgoingSplitId++;
+        }
+
+        for (uint32_t splitIndex = 0; splitIndex < splitCount; ++splitIndex) {
+            std::size_t begin = static_cast<std::size_t>(splitIndex) * maxPayloadPerDatagram;
+            std::size_t end = std::min(begin + maxPayloadPerDatagram, payload.size());
+
+            std::vector<uint8_t> chunk(
+                payload.begin() + static_cast<std::ptrdiff_t>(begin),
+                payload.begin() + static_cast<std::ptrdiff_t>(end)
+            );
+
+            uint32_t sequence = 0;
+            uint32_t reliableIndex = 0;
+            {
+                std::lock_guard<std::mutex> lock(peersMutex_);
+                auto& state = peers_[peer.address + ":" + std::to_string(peer.port)];
+                sequence = state.outgoingSequence++;
+                reliableIndex = state.reliableIndex++;
+            }
+
+            std::vector<uint8_t> out;
+            out.push_back(0x80);
+            writeTriadLE(out, sequence);
+
+            const uint8_t reliability = 3;
+            out.push_back(static_cast<uint8_t>((reliability << 5u) | 0x10u));
+            writeU16BE(out, static_cast<uint16_t>(chunk.size() * 8u));
+            writeTriadLE(out, reliableIndex);
+            writeTriadLE(out, sharedOrderedIndex);
+            out.push_back(0);
+            writeU32BE(out, splitCount);
+            writeU16BE(out, splitId);
+            writeU32BE(out, splitIndex);
+            out.insert(out.end(), chunk.begin(), chunk.end());
+
+            sendTo(target, targetLen, out);
+        }
         return;
     }
 

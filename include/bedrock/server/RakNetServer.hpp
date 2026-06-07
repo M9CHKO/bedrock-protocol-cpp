@@ -78,12 +78,20 @@ public:
 
 private:
     struct PeerState {
+        struct SplitAccumulator {
+            uint32_t count = 0;
+            std::vector<std::vector<uint8_t>> parts;
+            std::vector<bool> received;
+        };
+
         RakNetServerPeer peer;
         std::array<uint8_t, 128> endpoint {};
         int endpointLen = 0;
         uint32_t outgoingSequence = 0;
         uint32_t reliableIndex = 0;
         uint32_t orderedIndex = 0;
+        uint16_t outgoingSplitId = 1;
+        std::unordered_map<uint16_t, SplitAccumulator> splits;
     };
 
     RakNetServerOptions options_;

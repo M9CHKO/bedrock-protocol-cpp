@@ -30,6 +30,13 @@ void writeU16BE(std::vector<uint8_t>& out, uint16_t value) {
     out.push_back(static_cast<uint8_t>(value & 0xffu));
 }
 
+void writeU32BE(std::vector<uint8_t>& out, uint32_t value) {
+    out.push_back(static_cast<uint8_t>((value >> 24u) & 0xffu));
+    out.push_back(static_cast<uint8_t>((value >> 16u) & 0xffu));
+    out.push_back(static_cast<uint8_t>((value >> 8u) & 0xffu));
+    out.push_back(static_cast<uint8_t>(value & 0xffu));
+}
+
 void writeU64BE(std::vector<uint8_t>& out, uint64_t value) {
     for (int i = 7; i >= 0; --i) {
         out.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xffu));
@@ -109,6 +116,30 @@ std::vector<uint8_t> buildReliableDatagram(
     writeTriadLE(out, orderedIndex);
     out.push_back(0);
     out.insert(out.end(), payload.begin(), payload.end());
+    return out;
+}
+
+std::vector<uint8_t> buildSplitReliableDatagram(
+    const std::vector<uint8_t>& payloadPart,
+    uint32_t sequence,
+    uint32_t reliableIndex,
+    uint32_t orderedIndex,
+    uint32_t splitCount,
+    uint16_t splitId,
+    uint32_t splitIndex
+) {
+    std::vector<uint8_t> out;
+    out.push_back(0x80);
+    writeTriadLE(out, sequence);
+    out.push_back(static_cast<uint8_t>((3u << 5u) | 0x10u));
+    writeU16BE(out, static_cast<uint16_t>(payloadPart.size() * 8u));
+    writeTriadLE(out, reliableIndex);
+    writeTriadLE(out, orderedIndex);
+    out.push_back(0);
+    writeU32BE(out, splitCount);
+    writeU16BE(out, splitId);
+    writeU32BE(out, splitIndex);
+    out.insert(out.end(), payloadPart.begin(), payloadPart.end());
     return out;
 }
 
@@ -262,12 +293,24 @@ bool checkNetworkSettingsResponse(uint16_t port) {
     auto codec = bedrock::VersionedMcpeCodec::forVersion("1.20.40");
     auto request = codec.packetCodec().makePacketByName("request_network_settings", {0x00, 0x00, 0x02, 0x6e});
     auto mcpe = codec.encodeMcpePayload({request}, bedrock::VersionedMcpeCompression::Uncompressed);
-    auto datagram = buildReliableDatagram(mcpe, 1, 1, 1);
+    auto splitAt = mcpe.size() / 2;
+    std::vector<uint8_t> part0(mcpe.begin(), mcpe.begin() + static_cast<std::ptrdiff_t>(splitAt));
+    std::vector<uint8_t> part1(mcpe.begin() + static_cast<std::ptrdiff_t>(splitAt), mcpe.end());
+    auto datagram0 = buildSplitReliableDatagram(part0, 1, 1, 1, 2, 7, 0);
+    auto datagram1 = buildSplitReliableDatagram(part1, 2, 2, 2, 2, 7, 1);
 
     sendto(
         sock,
-        datagram.data(),
-        datagram.size(),
+        datagram0.data(),
+        datagram0.size(),
+        0,
+        reinterpret_cast<const sockaddr*>(&target),
+        sizeof(target)
+    );
+    sendto(
+        sock,
+        datagram1.data(),
+        datagram1.size(),
         0,
         reinterpret_cast<const sockaddr*>(&target),
         sizeof(target)
@@ -330,7 +373,7 @@ bool waitForAccepted(int sock) {
     return false;
 }
 
-bool checkLoginHandshakeResponse(uint16_t port) {
+bool checkLoginHandshakeResponse(uint16_t port, bool& sawOutboundSplit) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
         return false;
@@ -458,7 +501,8 @@ bool checkLoginHandshakeResponse(uint16_t port) {
         sizeof(target)
     );
 
-    for (int attempt = 0; attempt < 10; ++attempt) {
+    bool sawPlayStatus = false;
+    for (int attempt = 0; attempt < 20; ++attempt) {
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(sock, &readfds);
@@ -474,6 +518,15 @@ bool checkLoginHandshakeResponse(uint16_t port) {
         if (received <= 0) continue;
         reply.resize(static_cast<std::size_t>(received));
 
+        if (reply.size() > 4 && reply[0] >= 0x80 && reply[0] <= 0x8f && (reply[4] & 0x10u) != 0) {
+            sawOutboundSplit = true;
+            if (sawPlayStatus) {
+                close(sock);
+                return true;
+            }
+            continue;
+        }
+
         for (const auto& payload : parseDatagramPayloads(reply)) {
             if (payload.empty() || payload[0] != 0xfe) continue;
 
@@ -486,15 +539,18 @@ bool checkLoginHandshakeResponse(uint16_t port) {
             auto decoded = codec.decodeCompressionPacket(plaintext);
             for (const auto& packet : decoded.batch.packets) {
                 if (packet.name == "play_status") {
-                    close(sock);
-                    return true;
+                    sawPlayStatus = true;
+                    if (sawOutboundSplit) {
+                        close(sock);
+                        return true;
+                    }
                 }
             }
         }
     }
 
     close(sock);
-    return false;
+    return sawPlayStatus;
 }
 
 } // namespace
@@ -503,6 +559,7 @@ int main() {
     std::atomic<int> connects {0};
     std::atomic<int> requestNetworkSettingsPackets {0};
     std::atomic<int> joins {0};
+    bool sawOutboundSplit = false;
 
     auto server = bedrock::createServer({
         .host = "127.0.0.1",
@@ -542,6 +599,14 @@ int main() {
             << ":"
             << connection.port
             << "\n";
+        server.send(connection, "text", bedrock::ProtoDefValue::object({
+            {"type", bedrock::ProtoDefValue::string("raw")},
+            {"needs_translation", bedrock::ProtoDefValue::boolean(false)},
+            {"message", bedrock::ProtoDefValue::string(std::string(5000, 'x'))},
+            {"xuid", bedrock::ProtoDefValue::string("")},
+            {"platform_chat_id", bedrock::ProtoDefValue::string("")},
+            {"filtered_message", bedrock::ProtoDefValue::string("")}
+        }));
     });
 
     server.listen();
@@ -596,8 +661,14 @@ int main() {
         return 1;
     }
 
-    if (!checkLoginHandshakeResponse(port)) {
+    if (!checkLoginHandshakeResponse(port, sawOutboundSplit)) {
         std::cerr << "[SMOKE] login -> server_to_client_handshake failed\n";
+        server.close();
+        return 1;
+    }
+
+    if (!sawOutboundSplit) {
+        std::cerr << "[SMOKE] server did not send outbound split datagrams\n";
         server.close();
         return 1;
     }

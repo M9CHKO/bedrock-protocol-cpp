@@ -1,5 +1,6 @@
 # Supported Versions
 
+
 The library loads bundled protocol data from `data/minecraft-data/bedrock`. Use a concrete version string in `bedrock::createClient` for reproducible bots:
 
 ```cpp

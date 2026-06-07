@@ -73,11 +73,11 @@ relay.on("clientbound", [](bedrock::BedrockRelayPacketEvent& event) {
 relay.listen();
 ```
 
-`createRelayServer` currently requires the downstream listener version and upstream client version to match. This keeps packet ids, compression shape, encryption, and schema encoding consistent while the full JS relay runtime is being ported.
+`createRelayServer` currently requires the downstream listener version and upstream client version to match. This keeps packet ids, compression shape, encryption, and schema encoding consistent while the full.
 
 ## Packet Directions
 
-Use the same direction names as JavaScript relay:
+Use the same direction names as cpp relay:
 
 ```cpp
 relay.on("serverbound", [](bedrock::BedrockRelayPacketEvent& event) {

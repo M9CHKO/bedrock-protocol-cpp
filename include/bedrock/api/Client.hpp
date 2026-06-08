@@ -117,6 +117,18 @@ struct Packet {
         std::map<std::string, std::size_t> folded;
 
         for (const auto& [k, v] : fields) {
+            if (!k.empty() && k[0] == '$') {
+                continue;
+            }
+
+            if (k.find(".$") != std::string::npos) {
+                continue;
+            }
+
+            if (v.rfind("<no_branch:", 0) == 0) {
+                continue;
+            }
+
             if (foldedByDefault(k)) {
                 folded["itemstates"]++;
                 continue;

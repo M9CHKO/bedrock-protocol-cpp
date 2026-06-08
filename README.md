@@ -207,7 +207,7 @@ Open the library folder itself:
 C:\path\to\bedrock-protocol-cpp
 ```
 
-Do not open the parent folder that contains `bedrock-protocol-cpp/`, `node_modules/`, logs, and zip files. The checked-in `.vscode/settings.json` expects `${workspaceFolder}` to be the library root.
+Do not open the parent folder that contains `bedrock-protocol-cpp/`, logs, and zip files. The checked-in `.vscode/settings.json` expects `${workspaceFolder}` to be the library root.
 
 Then run:
 

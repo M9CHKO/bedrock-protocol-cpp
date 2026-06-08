@@ -42,7 +42,12 @@ public:
             return this->resolveType(typeName);
         });
 
-        decoder.decode(*typeJson, reader, "", out, context);
+        try {
+            decoder.decode(*typeJson, reader, "", out, context);
+        } catch (const std::exception&) {
+            // Best-effort API decode:
+            // keep fields decoded before EOF / schema mismatch.
+        }
 
         return out;
     }

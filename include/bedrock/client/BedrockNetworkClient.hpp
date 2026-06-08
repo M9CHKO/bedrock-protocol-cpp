@@ -131,6 +131,8 @@ private:
     DerivedKeyResult encryptionKeys_;
     uint64_t sendCounter_ = 0;
     uint64_t receiveCounter_ = 0;
+    std::unique_ptr<BedrockAesGcmStream> encryptStream_;
+    std::unique_ptr<BedrockAesGcmStream> decryptStream_;
     BedrockClientKeyPair clientKeys_;
 
     static BedrockNetworkClientOptions normalizeOptions(BedrockNetworkClientOptions options);

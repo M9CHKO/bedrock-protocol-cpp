@@ -361,12 +361,42 @@ void BedrockNetworkClient::handleRakNetPayload(const std::vector<uint8_t>& paylo
 
     VersionedMcpePayload decoded;
     if (encryptionEnabled_) {
-        auto compressionPacket = BedrockEncryption::decryptMcpePayloadGcm(
-            payload,
-            receiveCounter_++,
-            encryptionKeys_.secretKeyBytes,
-            encryptionKeys_.iv16
+        if (!decryptStream_) {
+            throw std::runtime_error("decrypt stream is not initialized");
+        }
+
+        if (payload.empty() || payload[0] != 0xfe) {
+            throw std::runtime_error("encrypted MCPE payload missing 0xfe header");
+        }
+
+        std::vector<uint8_t> encryptedOnly(payload.begin() + 1, payload.end());
+        auto aesPlaintext = decryptStream_->process(encryptedOnly);
+
+        if (aesPlaintext.size() < 8) {
+            throw std::runtime_error("decrypted payload too small for checksum");
+        }
+
+        std::vector<uint8_t> compressionPacket(
+            aesPlaintext.begin(),
+            aesPlaintext.end() - 8
         );
+
+        std::vector<uint8_t> receivedChecksum(
+            aesPlaintext.end() - 8,
+            aesPlaintext.end()
+        );
+
+        auto expectedChecksum = BedrockEncryption::computeChecksum(
+            compressionPacket,
+            receiveCounter_,
+            encryptionKeys_.secretKeyBytes
+        );
+
+        if (receivedChecksum != expectedChecksum) {
+            throw std::runtime_error("encrypted payload checksum mismatch");
+        }
+
+        receiveCounter_++;
         decoded = session_.mcpeCodec().decodeCompressionPacket(compressionPacket);
     } else {
         decoded = session_.mcpeCodec().decodeMcpePayload(payload);
@@ -551,6 +581,16 @@ void BedrockNetworkClient::startEncryptionFromServerHandshake(const VersionedGam
     encryptionEnabled_ = true;
     sendCounter_ = 0;
     receiveCounter_ = 0;
+    encryptStream_ = std::make_unique<BedrockAesGcmStream>(
+        encryptionKeys_.secretKeyBytes,
+        encryptionKeys_.iv16,
+        BedrockAesGcmStream::Mode::Encrypt
+    );
+    decryptStream_ = std::make_unique<BedrockAesGcmStream>(
+        encryptionKeys_.secretKeyBytes,
+        encryptionKeys_.iv16,
+        BedrockAesGcmStream::Mode::Decrypt
+    );
 
     auto handshake = session_.writeClientToServerHandshake();
     sendPackets({handshake}, true);
@@ -573,16 +613,31 @@ void BedrockNetworkClient::sendPackets(
     }
 
     if (encryptionEnabled_) {
-        auto compression = encryptedCompression
-            ? VersionedMcpeCompression::DeflateRaw
-            : choosePlainCompression(packets);
-        auto compressionPacket = session_.mcpeCodec().encodeCompressionPacket(packets, compression);
-        auto encrypted = BedrockEncryption::encryptMcpePayloadGcm(
+        if (!encryptStream_) {
+            throw std::runtime_error("encrypt stream is not initialized");
+        }
+
+        // Match tools/session.cpp encrypted path exactly:
+        // full packets -> framed batch -> raw deflate -> AES plaintext/checksum -> stream encrypt.
+        // Do not use choosePlainCompression() here; old versions like 1.20.40 expect this.
+        auto compressionPacket = session_.mcpeCodec().encodeCompressionPacket(
+            packets,
+            VersionedMcpeCompression::DeflateRaw
+        );
+
+        auto aesPlaintext = BedrockEncryption::makeAesPlaintext(
             compressionPacket,
             sendCounter_++,
-            encryptionKeys_.secretKeyBytes,
-            encryptionKeys_.iv16
+            encryptionKeys_.secretKeyBytes
         );
+
+        auto encryptedOnly = encryptStream_->process(aesPlaintext);
+
+        std::vector<uint8_t> encrypted;
+        encrypted.reserve(1 + encryptedOnly.size());
+        encrypted.push_back(0xfe);
+        encrypted.insert(encrypted.end(), encryptedOnly.begin(), encryptedOnly.end());
+
         raknet_->sendReliable(encrypted);
         return;
     }

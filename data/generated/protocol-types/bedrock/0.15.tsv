@@ -1,6 +1,6 @@
 # type	json
 # source_protocol_dir	0.15
-# source_protocol_json	data\minecraft-data\bedrock\0.15\protocol.json
+# source_protocol_json	data/minecraft-data/bedrock/0.15/protocol.json
 blockcoordinates	["container",[{"name":"x","type":"i32"},{"name":"y","type":"i32"},{"name":"z","type":"i32"}]]
 blockrecords	["array",{"countType":"i32","type":["container",[{"name":"x","type":"i32"},{"name":"z","type":"i32"},{"name":"y","type":"i8"},{"name":"blockId","type":"i8"},{"anon":true,"type":["bitfield",[{"name":"blockData","size":4,"signed":false},{"name":"flags","size":4,"signed":false}]]}]]}]
 encapsulated_packet	["container",[{"name":"name","type":["mapper",{"type":"u8","mappings":{"0xfe":"mcpe"}}]},{"name":"params","type":["switch",{"compareTo":"name","fields":{"mcpe":"mcpe_packet"}}]}]]

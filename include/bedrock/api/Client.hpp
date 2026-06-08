@@ -76,6 +76,73 @@ struct Packet {
         auto it = fields.find(key);
         return it == fields.end() ? std::string() : it->second;
     }
+
+    std::string operator[](const std::string& key) const {
+        return get(key);
+    }
+
+    bool hasField(const std::string& key) const {
+        return fields.find(key) != fields.end();
+    }
+
+    bool empty(const std::string& key) const {
+        return get(key).empty();
+    }
+
+    std::map<std::string, std::string> select(const std::string& prefix) const {
+        std::map<std::string, std::string> out;
+
+        for (const auto& [k, v] : fields) {
+            if (k == prefix || k.rfind(prefix + ".", 0) == 0 || k.rfind(prefix + "[", 0) == 0) {
+                out[k] = v;
+            }
+        }
+
+        return out;
+    }
+
+    bool foldedByDefault(const std::string& key) const {
+        if (name == "start_game" && key.rfind("itemstates[", 0) == 0) {
+            return true;
+        }
+        return false;
+    }
+
+    void print(std::ostream& os = std::cout) const {
+        os << "\n[PACKET] " << name << " id=" << id
+           << " ok=" << (ok ? "true" : "false")
+           << " fields=" << fields.size()
+           << "\n";
+
+        std::map<std::string, std::size_t> folded;
+
+        for (const auto& [k, v] : fields) {
+            if (foldedByDefault(k)) {
+                folded["itemstates"]++;
+                continue;
+            }
+
+            os << "  " << k << " = " << v << "\n";
+        }
+
+        for (const auto& [k, count] : folded) {
+            os << "  " << k << " = <folded " << count
+               << " fields; use packet.print(\"" << k << "\")>\n";
+        }
+    }
+
+    void print(const std::string& prefix, std::ostream& os = std::cout) const {
+        printOnly(prefix, os);
+    }
+
+    void printOnly(const std::string& prefix, std::ostream& os = std::cout) const {
+        os << "\n[PACKET] " << name << " id=" << id
+           << " prefix=" << prefix << "\n";
+
+        for (const auto& [k, v] : select(prefix)) {
+            os << "  " << k << " = " << v << "\n";
+        }
+    }
 };
 
 struct TextPacket {
@@ -142,6 +209,11 @@ public:
         }
 
         setProcessEnv("BEDROCK_API_DUMP", "1");
+        if (!options_.decodePackets) {
+            setProcessEnv("BEDROCK_API_FAST", "1");
+        } else {
+            setProcessEnv("BEDROCK_API_FAST", "0");
+        }
         commandFilePath_ = makeTempCommandFilePath();
         {
             std::ofstream commandFile(commandFilePath_, std::ios::binary | std::ios::trunc);

@@ -20,6 +20,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -36,7 +37,6 @@ struct Options {
     std::string host = "localhost";
     uint16_t port = 19132;
     std::string username = "Bot";
-    std::string profile;
     std::string version = "latest";
     bool offline = false;
     bool interactiveAuth = true;
@@ -49,7 +49,7 @@ struct Options {
     bool autoInitPlayer = true;
     bool autoResourcePackResponses = true;
     bool clientCacheEnabled = false;
-    bool trackWorld = true;
+    bool trackWorld = false;
     int32_t chunkRadius = 20;
     std::vector<uint8_t> loginPacket;
 
@@ -89,18 +89,21 @@ public:
             onAny(std::move(handler));
             return;
         }
+        subscribedPackets_.insert(packetName);
         network_.on(packetName, [this, handler = std::move(handler)](const BedrockNetworkClientPacketEvent& event) {
             handler(toApiPacket(event.packet));
         });
     }
 
     void onAny(PacketHandler handler) {
+        decodeAnyPacket_ = true;
         network_.onAny([this, handler = std::move(handler)](const BedrockNetworkClientPacketEvent& event) {
             handler(toApiPacket(event.packet));
         });
     }
 
     void onText(TextHandler handler) {
+        subscribedPackets_.insert("text");
         network_.on("text", [this, handler = std::move(handler)](const BedrockNetworkClientPacketEvent& event) {
             auto packet = toApiPacket(event.packet);
             TextPacket text;
@@ -166,11 +169,10 @@ private:
     ProtoDefPacketDecoder decoder_;
     BedrockNetworkClient network_;
     std::vector<std::pair<std::string, ProtoDefValue>> queuedValues_;
+    std::unordered_set<std::string> subscribedPackets_;
+    bool decodeAnyPacket_ = false;
 
     static Options normalizeOptions(Options options) {
-        if (options.profile.empty()) {
-            options.profile = options.username.empty() ? std::string("Bot") : options.username;
-        }
         if (options.version.empty() || options.version == "auto" || options.version == "latest") {
             auto vs = ProtocolDefinition::versions();
             if (!vs.empty()) options.version = vs.back();
@@ -183,7 +185,9 @@ private:
         out.host = options.host;
         out.port = options.port;
         out.username = options.username;
-        out.profile = options.profile;
+        out.profile = options.username.empty()
+            ? std::string("Bot")
+            : options.username;
         out.version = options.version;
         out.offline = options.offline;
         out.interactiveAuth = options.interactiveAuth;
@@ -208,10 +212,31 @@ private:
         out.ok = true;
 
         if (options_.decodePackets) {
+            bool shouldDecode =
+                decodeAnyPacket_ ||
+                subscribedPackets_.find(packet.name) != subscribedPackets_.end();
+
+            if (!shouldDecode) {
+                return out;
+            }
+
             try {
                 auto fields = decoder_.decodePacket(packet.name, packet.payload);
+
                 for (const auto& field : fields) {
                     out.fields[field.path] = field.value;
+
+                    auto c1 = field.value.find(',');
+                    auto c2 = c1 == std::string::npos
+                        ? std::string::npos
+                        : field.value.find(',', c1 + 1);
+
+                    if (c1 != std::string::npos && c2 != std::string::npos) {
+                        out.fields[field.path + ".x"] = field.value.substr(0, c1);
+                        out.fields[field.path + ".y"] = field.value.substr(c1 + 1, c2 - c1 - 1);
+                        out.fields[field.path + ".z"] = field.value.substr(c2 + 1);
+                    }
+
                     auto dot = field.path.rfind('.');
                     if (dot != std::string::npos) {
                         out.fields[field.path.substr(dot + 1)] = field.value;
@@ -230,7 +255,18 @@ private:
     }
 };
 
+// Direct in-process network client, if needed later.
+
+
+
+
+
+
 inline Client createClient(Options options = {}) {
+    return Client(std::move(options));
+}
+
+inline Client createNetworkClient(Options options = {}) {
     return Client(std::move(options));
 }
 

@@ -1,6 +1,6 @@
 # type	json
 # source_protocol_dir	1.16.201
-# source_protocol_json	data\minecraft-data\bedrock\1.16.201\protocol.json
+# source_protocol_json	data/minecraft-data/bedrock/1.16.201/protocol.json
 ActionPermissions	["bitflags",{"type":"varint","flags":{"build_and_mine":65537,"doors_and_switches":65538,"open_containers":65540,"attack_players":65544,"attack_mobs":65552,"operator":65568,"teleport":65664}}]
 AdventureFlags	["bitflags",{"type":"varint","flags":{"world_immutable":1,"no_pvp":2,"auto_jump":32,"allow_flight":64,"no_clip":128,"world_builder":256,"flying":512,"muted":1024}}]
 ArmorDamageType	["bitflags",{"type":"u8","flags":{"head":1,"chest":2,"legs":4,"feet":8}}]

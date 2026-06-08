@@ -52,10 +52,9 @@ options.server.port = 19132;
 options.server.version = "1.20.40";
 options.server.motd = "Bedrock Protocol C++ Relay";
 
-options.upstream.host = "cpe.ign.gg";
+options.upstream.host = "localhost";
 options.upstream.port = 19132;
-options.upstream.username = "StewedV";
-options.upstream.profile = "StewedV";
+options.upstream.username = "Notch";
 options.upstream.version = "1.20.40";
 options.upstream.offline = false;
 options.upstream.interactiveAuth = true;

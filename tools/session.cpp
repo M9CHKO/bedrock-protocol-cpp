@@ -1032,6 +1032,52 @@ static uint32_t sendEncryptedGamePacketReliable(
     return seq;
 }
 
+
+static void dumpApiOutboundGamePacket(
+    const std::vector<uint8_t>& gamePacket,
+    const std::string& label
+) {
+    if (std::getenv("BEDROCK_API_DUMP") == nullptr) {
+        return;
+    }
+
+    try {
+        size_t off = 0;
+        uint32_t header = readVarUInt(gamePacket, off);
+        uint32_t packetId = header & 0x3ff;
+
+        static bedrock::ProtocolDefinition protocolDefinition =
+            bedrock::ProtocolDefinition::forVersion(g_minecraftVersion);
+
+        std::string name = protocolDefinition.packetName(packetId);
+        if (name.empty()) {
+            name = "unknown_" + std::to_string(packetId);
+        }
+
+        std::cout << "[API] packet"
+                  << " id=" << packetId
+                  << " name=" << apiFieldEscape(name)
+                  << " ok=true"
+                  << " fields=4"
+                  << " direction=serverbound"
+                  << " label=" << apiFieldEscape(label)
+                  << " raw_size=" << gamePacket.size()
+                  << " payload_size=" << (gamePacket.size() >= off ? gamePacket.size() - off : 0)
+                  << "\n" << std::flush;
+    } catch (const std::exception& e) {
+        std::cout << "[API] packet"
+                  << " id=0"
+                  << " name=outbound_decode_error"
+                  << " ok=false"
+                  << " fields=3"
+                  << " direction=serverbound"
+                  << " label=" << apiFieldEscape(label)
+                  << " decode_error=" << apiFieldEscape(e.what())
+                  << "\n" << std::flush;
+    }
+}
+
+
 static uint32_t sendPlainGamePacketReliable(
     int sock,
     const sockaddr_in& target,
@@ -1097,6 +1143,8 @@ static uint32_t sendGamePacketReliable(
     bedrock::BedrockAesGcmStream* encryptStream,
     const std::string& label
 ) {
+    dumpApiOutboundGamePacket(gamePacket, label);
+
     if (encryptionReady) {
         if (encryptStream == nullptr) {
             throw std::runtime_error("encryption is ready but encrypt stream is missing");
@@ -2014,6 +2062,27 @@ if (packetPlaintext.empty()) {
                 eventPacket.name = "unknown_" + std::to_string(packetId);
             }
 
+            bool apiDump = std::getenv("BEDROCK_API_DUMP") != nullptr;
+            bool apiFast = std::getenv("BEDROCK_API_FAST") != nullptr
+                && std::string(std::getenv("BEDROCK_API_FAST")) == "1";
+
+            static uint64_t apiPacketSeq = 0;
+
+            if (apiDump && apiFast) {
+                std::cout << "[API] packet"
+                          << " seq=" << (++apiPacketSeq)
+                          << " id=" << eventPacket.packetId
+                          << " name=" << apiFieldEscape(eventPacket.name)
+                          << " ok=true"
+                          << " fields=5"
+                          << " direction=clientbound"
+                          << " raw_size=" << eventPacket.fullPacket.size()
+                          << " payload_size=" << eventPacket.payload.size()
+                          << "\n" << std::flush;
+                gotEncryptedGamePacket = true;
+                continue;
+            }
+
             static bedrock::BedrockPacketEventDispatcher packetEvents(g_minecraftVersion);
             bedrock::BedrockPacketEvent emittedEvent;
             emittedEvent.version = g_minecraftVersion;
@@ -2023,7 +2092,23 @@ if (packetPlaintext.empty()) {
             emittedEvent.payload = eventPacket.payload;
 
             if (g_decodeEvents) {
-                emittedEvent = packetEvents.dispatch(eventPacket);
+                try {
+                    emittedEvent = packetEvents.dispatch(eventPacket);
+                } catch (const std::exception& e) {
+                    emittedEvent.version = g_minecraftVersion;
+                    emittedEvent.packetId = eventPacket.packetId;
+                    emittedEvent.packetName = eventPacket.name;
+                    emittedEvent.rawPacket = eventPacket.fullPacket;
+                    emittedEvent.payload = eventPacket.payload;
+                    emittedEvent.decodeError = e.what();
+                } catch (...) {
+                    emittedEvent.version = g_minecraftVersion;
+                    emittedEvent.packetId = eventPacket.packetId;
+                    emittedEvent.packetName = eventPacket.name;
+                    emittedEvent.rawPacket = eventPacket.fullPacket;
+                    emittedEvent.payload = eventPacket.payload;
+                    emittedEvent.decodeError = "unknown decode error";
+                }
             }
             static bedrock::Client mc;
             static bool mcHandlersReady = false;
@@ -2036,7 +2121,6 @@ if (packetPlaintext.empty()) {
                 mcHandlersReady = true;
             }
 
-            bool apiDump = std::getenv("BEDROCK_API_DUMP") != nullptr;
             auto apiEvent = bedrock::toPacketEventApi(emittedEvent);
 
             if (apiDump) {
@@ -2044,7 +2128,8 @@ if (packetPlaintext.empty()) {
                           << " id=" << apiEvent.id
                           << " name=" << apiEvent.name
                           << " ok=" << (apiEvent.ok() ? "true" : "false")
-                          << " fields=" << apiEvent.params.size();
+                          << " fields=" << (apiEvent.params.size() + 1)
+                          << " direction=clientbound";
 
                 for (const auto& kv : apiEvent.params) {
                     std::cout << " " << kv.first << "=" << apiFieldEscape(kv.second);

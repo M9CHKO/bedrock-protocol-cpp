@@ -5,9 +5,11 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <map>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace bedrock {
@@ -75,6 +77,11 @@ private:
         std::vector<bool> received;
     };
 
+    struct PendingInboundPayload {
+        uint32_t orderedIndex = 0;
+        std::vector<uint8_t> payload;
+    };
+
     RakNetClientOptions options_;
     int socket_ = -1;
     uint16_t localPort_ = 0;
@@ -96,6 +103,10 @@ private:
     uint32_t orderedIndex_ = 0;
     uint16_t outgoingSplitId_ = 1;
     std::unordered_map<uint16_t, SplitAccumulator> splits_;
+    std::vector<PendingInboundPayload> pendingInboundPayloads_;
+    uint32_t nextInboundOrderedIndex_ = 0;
+    std::map<uint32_t, std::vector<uint8_t>> pendingOrderedPayloads_;
+    std::unordered_set<uint32_t> receivedDatagramSequences_;
     std::unordered_map<uint32_t, std::vector<uint8_t>> sentReliableDatagrams_;
 
     void runLoop();

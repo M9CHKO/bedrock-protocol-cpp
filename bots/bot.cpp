@@ -1,30 +1,53 @@
 #include <bedrock/bedrock.hpp>
 
 #include <iostream>
+#include <string>
 
 int main() {
     auto client = bedrock::createClient({
-        .host = "localhost",
+        .host = "cpe.ign.gg",
         .port = 19132,
-        .username = "Notch",
-        .version = "latest",
-        .offline = true,
-        .debug = bedrock::DebugMode::Events
+        .username = "StewedV",
+        .version = "1.26.20",
+        .offline = false
     });
 
-    client.on("start_game", [](const bedrock::Packet&) {
-        std::cout << "Joined world\n";
+    client.on("start_game", [](const bedrock::Packet& packet) {
+        std::cout << "\n[JOIN] start_game\n";
+        packet.print();
     });
 
-    client.on("disconnect", [](const bedrock::Packet& packet) {
-        std::cout << "Disconnected";
-        if (packet.has("reason")) std::cout << " reason=" << packet.get("reason");
-        if (packet.has("message")) std::cout << " message=" << packet.get("message");
-        std::cout << "\n";
+    client.on("move_player", [](const bedrock::Packet& packet) {
+        std::cout << "\n[MOVE_PLAYER]\n";
+        std::cout << "position = " << packet["position"] << "\n";
+        std::cout << "x        = " << packet["position.x"] << "\n";
+        std::cout << "y        = " << packet["position.y"] << "\n";
+        std::cout << "z        = " << packet["position.z"] << "\n";
+        std::cout << "yaw      = " << packet["yaw"] << "\n";
+        std::cout << "pitch    = " << packet["pitch"] << "\n";
+        std::cout << "mode     = " << packet["mode"] << "\n";
+        std::cout << "on_ground= " << packet["on_ground"] << "\n";
+        packet.print();
     });
 
-    client.on("packet", [](const bedrock::Packet& packet) {
-        std::cout << "packet " << packet.name << " id=" << packet.id << "\n";
+    client.on("text", [](const bedrock::Packet& packet) {
+        std::cout << "\n[TEXT]\n";
+        std::cout << "type    = " << packet["type"] << "\n";
+        std::cout << "message = " << packet["message"] << "\n";
+        std::cout << "xuid    = " << packet["xuid"] << "\n";
+        packet.print();
+    });
+
+    client.on("level_chunk", [](const bedrock::Packet& packet) {
+        packet.print();
+    });
+
+    client.onError([](const std::string& err) {
+        std::cerr << "\n[ERROR] " << err << "\n";
+    });
+
+    client.onClose([](const std::string& reason) {
+        std::cerr << "\n[CLOSE] " << reason << "\n";
     });
 
     return client.run();

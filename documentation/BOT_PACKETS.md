@@ -22,9 +22,7 @@ auto client = bedrock::createClient({
     .port = 19132,
     .username = "Notch",
     .version = "1.20.40",
-    .offline = true,
-    .debug = bedrock::DebugMode::Json,
-    .decodePackets = true
+    .offline = false
 });
 ```
 

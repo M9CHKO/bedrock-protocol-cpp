@@ -1168,9 +1168,14 @@ private:
                 std::to_string(reader.readF32LE()) + "," +
                 std::to_string(reader.readF32LE()) + "," +
                 std::to_string(reader.readF32LE());
-        } else if (typeName == "native" || typeName == "nbt") {
+        } else if (typeName == "native") {
             skipNativeNbt(reader);
             field.value = "<native>";
+        } else if (typeName == "nbt") {
+            // Bedrock metadata compound values are usually nameless little NBT payloads.
+            // Old code expected a named root tag here and could desync on set_entity_data.
+            skipLittleNbtPayloadOnly(reader);
+            field.value = "<nbt>";
         } else if (typeName == "lnbt") {
             skipLittleNbtPayloadOnly(reader);
             field.value = "<lnbt>";

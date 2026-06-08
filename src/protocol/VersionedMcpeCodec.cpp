@@ -78,7 +78,11 @@ VersionedMcpePayload VersionedMcpeCodec::decodeCompressionPacket(
     } else if (payload.compressionHeader == static_cast<uint8_t>(VersionedMcpeCompression::DeflateRaw)) {
         payload.framedBatch = inflateRaw(body);
     } else {
-        throw std::runtime_error("unknown compression header: " + std::to_string(payload.compressionHeader));
+        // Some newer Bedrock versions/servers may send the framed batch without
+        // the extra compression header. In that case the first byte is actually
+        // the first framed packet byte, not a compression mode.
+        payload.compressionHeader = static_cast<uint8_t>(VersionedMcpeCompression::Uncompressed);
+        payload.framedBatch = compressionPacket;
     }
 
     payload.batch = batchCodec_.decodeFramedBatch(payload.framedBatch);

@@ -163,11 +163,19 @@ std::vector<uint8_t> buildOpenConnectionRequest2(
     const std::string& serverIp,
     uint16_t serverPort,
     int mtu,
-    uint64_t clientGuid
+    uint64_t clientGuid,
+    bool serverSecurity,
+    uint32_t securityCookie
 ) {
     std::vector<uint8_t> out;
     out.push_back(ID_OPEN_CONNECTION_REQUEST_2);
     appendMagic(out);
+
+    if (serverSecurity) {
+        writeU32BE(out, securityCookie);
+        out.push_back(0x00); // client supports security = false
+    }
+
     writeRakNetAddressIPv4(out, serverIp, serverPort);
     writeU16BE(out, static_cast<uint16_t>(mtu));
     writeU64BE(out, clientGuid);
@@ -219,6 +227,9 @@ bool isOrdered(uint8_t reliability) {
 }
 
 struct ParsedFrame {
+    uint8_t reliability = 0;
+    uint32_t orderedIndex = 0;
+    bool ordered = false;
     bool split = false;
     uint32_t splitCount = 0;
     uint16_t splitId = 0;
@@ -237,6 +248,7 @@ std::vector<ParsedFrame> parseConnectedDatagram(const std::vector<uint8_t>& data
         ParsedFrame frame;
         uint8_t flags = data[offset++];
         uint8_t reliability = static_cast<uint8_t>((flags & 0xe0u) >> 5u);
+        frame.reliability = reliability;
         frame.split = (flags & 0x10u) != 0;
 
         uint16_t bitLength = readU16BE(data, offset);
@@ -245,7 +257,8 @@ std::vector<ParsedFrame> parseConnectedDatagram(const std::vector<uint8_t>& data
         if (isReliable(reliability)) (void) readTriadLE(data, offset);
         if (isSequenced(reliability)) (void) readTriadLE(data, offset);
         if (isOrdered(reliability)) {
-            (void) readTriadLE(data, offset);
+            frame.ordered = true;
+            frame.orderedIndex = readTriadLE(data, offset);
             if (offset >= data.size()) throw std::runtime_error("ordered channel out of range");
             ++offset;
         }
@@ -309,6 +322,10 @@ RakNetClient& RakNetClient::operator=(RakNetClient&& other) noexcept {
     orderedIndex_ = other.orderedIndex_;
     outgoingSplitId_ = other.outgoingSplitId_;
     splits_ = std::move(other.splits_);
+    pendingInboundPayloads_ = std::move(other.pendingInboundPayloads_);
+    nextInboundOrderedIndex_ = other.nextInboundOrderedIndex_;
+    pendingOrderedPayloads_ = std::move(other.pendingOrderedPayloads_);
+    receivedDatagramSequences_ = std::move(other.receivedDatagramSequences_);
     sentReliableDatagrams_ = std::move(other.sentReliableDatagrams_);
     if (other.thread_.joinable()) thread_ = std::move(other.thread_);
     return *this;
@@ -373,6 +390,9 @@ bool RakNetClient::connect() {
     }
     reply.resize(static_cast<std::size_t>(received));
 
+    bool serverSecurity = false;
+    uint32_t securityCookie = 0;
+
     try {
         std::size_t offset = 0;
         if (reply[offset++] != ID_OPEN_CONNECTION_REPLY_1 || !hasMagic(reply, offset)) {
@@ -382,11 +402,18 @@ bool RakNetClient::connect() {
         }
         offset += 16;
         (void) readU64BE(reply, offset);
-        if (offset >= reply.size() || reply[offset++] != 0) {
-            error_ = "secured RakNet server is not supported";
+
+        if (offset >= reply.size()) {
+            error_ = "invalid OpenConnectionReply1 security flag";
             close();
             return false;
         }
+
+        serverSecurity = reply[offset++] != 0;
+        if (serverSecurity) {
+            securityCookie = readU32BE(reply, offset);
+        }
+
         mtu_ = static_cast<int>(readU16BE(reply, offset));
     } catch (const std::exception& e) {
         error_ = e.what();
@@ -394,7 +421,14 @@ bool RakNetClient::connect() {
         return false;
     }
 
-    auto req2 = buildOpenConnectionRequest2(targetIp, options_.port, mtu_, options_.clientGuid);
+    auto req2 = buildOpenConnectionRequest2(
+        targetIp,
+        options_.port,
+        mtu_,
+        options_.clientGuid,
+        serverSecurity,
+        securityCookie
+    );
     sendToTarget(req2);
 
     reply.assign(4096, 0);
@@ -565,51 +599,146 @@ void RakNetClient::handlePacket(const std::vector<uint8_t>& packet) {
         auto frames = parseConnectedDatagram(packet, sequence);
         sendToTarget(buildAck(sequence));
 
-        for (const auto& frame : frames) {
-            std::vector<uint8_t> payload = frame.payload;
-            if (frame.split) {
-                if (frame.splitCount == 0 || frame.splitCount > 4096 || frame.splitIndex >= frame.splitCount) continue;
-                bool complete = false;
-                {
-                    std::lock_guard<std::mutex> lock(stateMutex_);
-                    auto& split = splits_[frame.splitId];
-                    if (split.count == 0) {
-                        split.count = frame.splitCount;
-                        split.parts.resize(frame.splitCount);
-                        split.received.resize(frame.splitCount, false);
-                    }
-                    if (split.count != frame.splitCount) {
-                        splits_.erase(frame.splitId);
-                        continue;
-                    }
-                    auto index = static_cast<std::size_t>(frame.splitIndex);
-                    split.parts[index] = frame.payload;
-                    split.received[index] = true;
-                    complete = std::all_of(split.received.begin(), split.received.end(), [](bool value) { return value; });
-                    if (complete) {
-                        payload.clear();
-                        for (const auto& part : split.parts) payload.insert(payload.end(), part.begin(), part.end());
-                        splits_.erase(frame.splitId);
-                    }
-                }
-                if (!complete) continue;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (!receivedDatagramSequences_.insert(sequence).second) {
+                return; // duplicate datagram; ACK it but do not decrypt/process twice
             }
+            if (receivedDatagramSequences_.size() > 32768) {
+                receivedDatagramSequences_.clear();
+                receivedDatagramSequences_.insert(sequence);
+            }
+        }
 
-            if (payload.empty()) continue;
+        auto processPayload = [&](const std::vector<uint8_t>& payload) {
+            if (payload.empty()) return;
+
             if (payload[0] == ID_CONNECTED_PING) {
                 std::size_t offset = 1;
                 sendConnectedPong(static_cast<int64_t>(readU64BE(payload, offset)));
-                continue;
+                return;
             }
+
             if (payload[0] == ID_CONNECTION_REQUEST_ACCEPTED) {
                 bool expected = false;
                 if (connected_.compare_exchange_strong(expected, true) && connectedHandler_) {
                     connectedHandler_();
                 }
+                return;
+            }
+
+            if (encapsulatedHandler_) {
+                encapsulatedHandler_(payload);
+            }
+        };
+
+        auto flushPendingIfReady = [&]() {
+            std::vector<std::vector<uint8_t>> ready;
+
+            {
+                std::lock_guard<std::mutex> lock(stateMutex_);
+
+                if (!splits_.empty()) {
+                    return;
+                }
+
+                for (auto& item : pendingInboundPayloads_) {
+                    pendingOrderedPayloads_[item.orderedIndex] = std::move(item.payload);
+                }
+                pendingInboundPayloads_.clear();
+
+                while (true) {
+                    auto it = pendingOrderedPayloads_.find(nextInboundOrderedIndex_);
+                    if (it == pendingOrderedPayloads_.end()) {
+                        break;
+                    }
+
+                    ready.push_back(std::move(it->second));
+                    pendingOrderedPayloads_.erase(it);
+                    ++nextInboundOrderedIndex_;
+                }
+            }
+
+            for (const auto& payload : ready) {
+                processPayload(payload);
+            }
+        };
+
+        for (const auto& frame : frames) {
+            std::vector<uint8_t> payload = frame.payload;
+            bool shouldQueueForOrdering = false;
+
+            if (frame.split) {
+                if (frame.splitCount == 0 || frame.splitCount > 4096 || frame.splitIndex >= frame.splitCount) {
+                    continue;
+                }
+
+                bool complete = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(stateMutex_);
+                    auto& split = splits_[frame.splitId];
+
+                    if (split.count == 0) {
+                        split.count = frame.splitCount;
+                        split.parts.resize(frame.splitCount);
+                        split.received.resize(frame.splitCount, false);
+                    }
+
+                    if (split.count != frame.splitCount) {
+                        splits_.erase(frame.splitId);
+                        continue;
+                    }
+
+                    auto index = static_cast<std::size_t>(frame.splitIndex);
+                    split.parts[index] = frame.payload;
+                    split.received[index] = true;
+
+                    complete = std::all_of(
+                        split.received.begin(),
+                        split.received.end(),
+                        [](bool value) { return value; }
+                    );
+
+                    if (complete) {
+                        payload.clear();
+                        for (const auto& part : split.parts) {
+                            payload.insert(payload.end(), part.begin(), part.end());
+                        }
+                        splits_.erase(frame.splitId);
+                    }
+                }
+
+                if (!complete) {
+                    continue;
+                }
+
+                shouldQueueForOrdering = true;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(stateMutex_);
+                if (frame.ordered || !splits_.empty() || !pendingInboundPayloads_.empty()) {
+                    shouldQueueForOrdering = true;
+                }
+
+                if (shouldQueueForOrdering) {
+                    pendingInboundPayloads_.push_back({
+                        frame.ordered ? frame.orderedIndex : nextInboundOrderedIndex_,
+                        std::move(payload)
+                    });
+                }
+            }
+
+            if (shouldQueueForOrdering) {
+                flushPendingIfReady();
                 continue;
             }
-            if (encapsulatedHandler_) encapsulatedHandler_(payload);
+
+            processPayload(payload);
         }
+
+        flushPendingIfReady();
     } catch (const std::exception& e) {
         error_ = e.what();
     }

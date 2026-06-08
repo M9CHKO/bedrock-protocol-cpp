@@ -95,7 +95,6 @@ int main() {
         .username = "Notch",
         .version = "1.20.40",
         .offline = true,
-        .debug = bedrock::DebugMode::Events
     });
 
     client.on("start_game", [](const bedrock::Packet&) {
@@ -190,7 +189,6 @@ Public online server:
 
 ```cpp
 .offline = false,
-.profile = "YourXboxProfileName",
 .interactiveAuth = true,
 ```
 

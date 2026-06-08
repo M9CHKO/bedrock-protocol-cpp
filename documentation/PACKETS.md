@@ -32,8 +32,6 @@ auto client = bedrock::createClient({
     .username = "Notch",
     .version = "1.21.100",
     .offline = true,
-    .debug = bedrock::DebugMode::Json,
-    .decodePackets = true
 });
 ```
 

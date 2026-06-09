@@ -133,8 +133,7 @@ auto client = bedrock::createClient({
 | `interactiveAuth` | `true` | If the Xbox cache is missing, show a device-code login prompt and save the profile cache. |
 | `xboxClientId` | empty | Optional OAuth client id override. Empty uses the common public Xbox client id used by Bedrock tooling. |
 | `authCacheRoot` | auto | Optional Xbox auth/key cache root. Empty uses the hidden default cache folder. |
-| `clientCacheEnabled` | `false` | Sends the client cache preference used by chunk cache flow. |
-| `trackWorld` | `true` | Decode supported `level_chunk` packets into `client.world()`. |
+| `clientCacheEnabled` | `false` | Sends the client cache preference used by chunk cache flow. 
 | `chunkRadius` | `20` | Requested chunk radius during automatic start-game initialization. |
 | `debug` | `Off` | `Off`, `Events`, `Packets`, `Json`, or `Trace`. |
 | `decodePackets` | `true` | Decode packet fields into JSON-style event fields. |

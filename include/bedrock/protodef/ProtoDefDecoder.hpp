@@ -1197,7 +1197,7 @@ private:
         } else if (typeName == "native") {
             skipNativeNbt(reader);
             field.value = "<native>";
-        } } else if (typeName == "nbt") {
+        }  else if (typeName == "nbt") {
             skipAnyLittleNbt(reader);
             field.value = "<nbt>";
         } else if (typeName == "lnbt") {

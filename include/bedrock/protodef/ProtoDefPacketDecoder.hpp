@@ -44,15 +44,20 @@ public:
 
         try {
             decoder.decode(*typeJson, reader, "", out, context);
-        }  catch (const std::exception& e) {
-            ProtoDefField err;
-            err.path = "$decode_error";
-            err.type = "error";
-            err.value = e.what();
-            err.offset = reader.offset();
-            err.size = 0;
-            out.push_back(err);
+        }   catch (const std::exception&) {
+            // Best-effort API decode:
+            // keep fields decoded before EOF / schema mismatch.
         }
+        
+     //   catch (const std::exception& e) {
+     //       ProtoDefField err;
+     //       err.path = "$decode_error";
+     //       err.type = "error";
+     //       err.value = e.what();
+     //       err.offset = reader.offset();
+     //       err.size = 0;
+     //       out.push_back(err);
+     //   }
 
         return out;
     }
@@ -72,3 +77,5 @@ private:
 };
 
 }
+
+ 

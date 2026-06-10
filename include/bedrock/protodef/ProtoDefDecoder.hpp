@@ -305,6 +305,32 @@ private:
         skipNbtPayload(reader, tag);
     }
 
+    static void skipUnnamedNativeNbt(ProtoDefReader& reader) {
+        uint8_t tag = reader.u8();
+        if (tag == 0) return;
+        skipNbtPayload(reader, tag);
+    }
+
+    static void skipAnyLittleNbt(ProtoDefReader& reader) {
+        const std::size_t before = reader.offset();
+
+        try {
+            skipLittleNbtPayloadOnly(reader);
+            return;
+        } catch (...) {
+            reader.rewindTo(before);
+        }
+
+        try {
+            skipNativeNbt(reader);
+            return;
+        } catch (...) {
+            reader.rewindTo(before);
+        }
+
+        skipUnnamedNativeNbt(reader);
+    }
+
 
     void decodeEncapsulated(
         const std::string& encapsulatedJson,
@@ -1171,13 +1197,11 @@ private:
         } else if (typeName == "native") {
             skipNativeNbt(reader);
             field.value = "<native>";
-        } else if (typeName == "nbt") {
-            // Bedrock metadata compound values are usually nameless little NBT payloads.
-            // Old code expected a named root tag here and could desync on set_entity_data.
-            skipLittleNbtPayloadOnly(reader);
+        } } else if (typeName == "nbt") {
+            skipAnyLittleNbt(reader);
             field.value = "<nbt>";
         } else if (typeName == "lnbt") {
-            skipLittleNbtPayloadOnly(reader);
+            skipAnyLittleNbt(reader);
             field.value = "<lnbt>";
         } else {
             if (resolver_) {

@@ -113,6 +113,7 @@ private:
     void handlePacket(const std::vector<uint8_t>& packet);
     void sendToTarget(const std::vector<uint8_t>& packet);
     void sendConnectionRequest();
+    void sendNewIncomingConnection();
     void sendConnectedPong(int64_t pingTime);
 };
 

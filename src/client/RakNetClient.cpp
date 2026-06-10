@@ -25,6 +25,7 @@ constexpr uint8_t ID_CONNECTED_PING = 0x00;
 constexpr uint8_t ID_CONNECTED_PONG = 0x03;
 constexpr uint8_t ID_CONNECTION_REQUEST = 0x09;
 constexpr uint8_t ID_CONNECTION_REQUEST_ACCEPTED = 0x10;
+constexpr uint8_t ID_NEW_INCOMING_CONNECTION = 0x13;
 constexpr uint8_t ID_NACK = 0xa0;
 constexpr uint8_t ID_ACK = 0xc0;
 
@@ -621,8 +622,11 @@ void RakNetClient::handlePacket(const std::vector<uint8_t>& packet) {
 
             if (payload[0] == ID_CONNECTION_REQUEST_ACCEPTED) {
                 bool expected = false;
-                if (connected_.compare_exchange_strong(expected, true) && connectedHandler_) {
-                    connectedHandler_();
+                if (connected_.compare_exchange_strong(expected, true)) {
+                    sendNewIncomingConnection();
+                    if (connectedHandler_) {
+                        connectedHandler_();
+                    }
                 }
                 return;
             }
@@ -762,6 +766,45 @@ void RakNetClient::sendConnectionRequest() {
     writeU64BE(payload, options_.clientGuid);
     writeU64BE(payload, static_cast<uint64_t>(nowMillis()));
     payload.push_back(0x00);
+    sendReliable(payload);
+}
+
+void RakNetClient::sendNewIncomingConnection() {
+    std::vector<uint8_t> payload;
+    payload.push_back(ID_NEW_INCOMING_CONNECTION);
+
+    sockaddr_in server {};
+    if (targetLen_ >= static_cast<int>(sizeof(sockaddr_in))) {
+        server = *reinterpret_cast<const sockaddr_in*>(target_.data());
+    }
+
+    auto writeAddress = [&](const sockaddr_in& addr) {
+        payload.push_back(4); // IPv4
+
+        uint32_t ip = ntohl(addr.sin_addr.s_addr);
+
+        payload.push_back(static_cast<uint8_t>((~((ip >> 24) & 0xffu)) & 0xffu));
+        payload.push_back(static_cast<uint8_t>((~((ip >> 16) & 0xffu)) & 0xffu));
+        payload.push_back(static_cast<uint8_t>((~((ip >> 8) & 0xffu)) & 0xffu));
+        payload.push_back(static_cast<uint8_t>((~(ip & 0xffu)) & 0xffu));
+
+        writeU16BE(payload, ntohs(addr.sin_port));
+    };
+
+    writeAddress(server);
+
+    sockaddr_in zero {};
+    zero.sin_family = AF_INET;
+    zero.sin_addr.s_addr = 0;
+    zero.sin_port = 0;
+
+    for (int i = 0; i < 20; ++i) {
+        writeAddress(zero);
+    }
+
+    writeU64BE(payload, static_cast<uint64_t>(nowMillis()));
+    writeU64BE(payload, static_cast<uint64_t>(nowMillis()));
+
     sendReliable(payload);
 }
 

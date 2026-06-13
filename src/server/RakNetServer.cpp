@@ -281,6 +281,9 @@ bool isOrdered(uint8_t reliability) {
 struct ParsedFrame {
     uint8_t reliability = 0;
     bool split = false;
+    bool ordered = false;
+    uint32_t orderedIndex = 0;
+    uint8_t orderedChannel = 0;
     uint32_t splitCount = 0;
     uint16_t splitId = 0;
     uint32_t splitIndex = 0;
@@ -315,11 +318,12 @@ std::vector<ParsedFrame> parseConnectedDatagram(
             (void) readTriadLE(data, offset);
         }
         if (isOrdered(frame.reliability)) {
-            (void) readTriadLE(data, offset);
+            frame.ordered = true;
+            frame.orderedIndex = readTriadLE(data, offset);
             if (offset >= data.size()) {
                 throw std::runtime_error("ordered channel out of range");
             }
-            ++offset;
+            frame.orderedChannel = data[offset++];
         }
         if (frame.split) {
             if (offset + 10 > data.size()) {
@@ -641,6 +645,13 @@ void RakNetServer::handlePacket(
                 state.peer = peer;
                 state.endpointLen = senderLen;
                 std::memcpy(state.endpoint.data(), sender, static_cast<std::size_t>(senderLen));
+                state.splits.clear();
+                state.sentReliableDatagrams.clear();
+                state.receivedDatagramOrder.clear();
+                state.receivedDatagramSequences.clear();
+                state.expectedOrderedIndex = {};
+                state.expectedOrderedIndexInitialized = {};
+                state.pendingOrderedPayloads = {};
             }
 
             if (openConnectionHandler_) {
@@ -681,6 +692,7 @@ void RakNetServer::handlePacket(
             sendTo(sender, senderLen, buildAck(sequence));
 
             RakNetServerPeer peer;
+            bool duplicateDatagram = false;
             {
                 std::lock_guard<std::mutex> lock(peersMutex_);
                 auto& state = peers_[peerKey(senderAddr)];
@@ -692,7 +704,70 @@ void RakNetServer::handlePacket(
                 state.endpointLen = senderLen;
                 std::memcpy(state.endpoint.data(), sender, static_cast<std::size_t>(senderLen));
                 peer = state.peer;
+
+                duplicateDatagram = state.receivedDatagramSequences.find(sequence) !=
+                    state.receivedDatagramSequences.end();
+                if (!duplicateDatagram) {
+                    state.receivedDatagramSequences[sequence] = true;
+                    state.receivedDatagramOrder.push_back(sequence);
+                    while (state.receivedDatagramOrder.size() > 4096) {
+                        state.receivedDatagramSequences.erase(state.receivedDatagramOrder.front());
+                        state.receivedDatagramOrder.pop_front();
+                    }
+                }
             }
+
+            if (duplicateDatagram) {
+                return;
+            }
+
+            auto processPayload = [&](const std::vector<uint8_t>& payload) {
+                if (payload.empty()) {
+                    return;
+                }
+
+                if (payload[0] == ID_CONNECTED_PING) {
+                    std::size_t offset = 1;
+                    const int64_t pingTime = static_cast<int64_t>(readU64BE(payload, offset));
+                    sendReliableOrdered(
+                        peer,
+                        sender,
+                        senderLen,
+                        buildConnectedPong(pingTime, nowMillis())
+                    );
+                    return;
+                }
+
+                if (payload[0] == ID_CONNECTION_REQUEST) {
+                    std::size_t offset = 1;
+                    const uint64_t clientGuid = readU64BE(payload, offset);
+                    const int64_t requestTimestamp = static_cast<int64_t>(readU64BE(payload, offset));
+                    (void) clientGuid;
+                    sendReliableOrdered(
+                        peer,
+                        sender,
+                        senderLen,
+                        buildConnectionRequestAccepted(senderAddr, requestTimestamp, nowMillis())
+                    );
+                    return;
+                }
+
+                if (payload[0] == ID_DISCONNECTION_NOTIFICATION ||
+                    payload[0] == ID_CONNECTION_LOST) {
+                    {
+                        std::lock_guard<std::mutex> lock(peersMutex_);
+                        peers_.erase(peerKey(senderAddr));
+                    }
+                    if (closeConnectionHandler_) {
+                        closeConnectionHandler_(peer);
+                    }
+                    return;
+                }
+
+                if (encapsulatedHandler_) {
+                    encapsulatedHandler_(peer, payload);
+                }
+            };
 
             for (const auto& frame : frames) {
                 std::vector<uint8_t> payload = frame.payload;
@@ -738,50 +813,47 @@ void RakNetServer::handlePacket(
                     }
                 }
 
-                if (payload.empty()) {
-                    continue;
-                }
+                std::vector<std::vector<uint8_t>> readyPayloads;
+                if (frame.ordered) {
+                    const uint8_t channel = frame.orderedChannel < 32 ? frame.orderedChannel : 0;
+                    std::lock_guard<std::mutex> lock(peersMutex_);
+                    auto& state = peers_[peerKey(senderAddr)];
+                    uint32_t& expected = state.expectedOrderedIndex[channel];
+                    bool& initialized = state.expectedOrderedIndexInitialized[channel];
 
-                if (payload[0] == ID_CONNECTED_PING) {
-                    std::size_t offset = 1;
-                    const int64_t pingTime = static_cast<int64_t>(readU64BE(payload, offset));
-                    sendReliableOrdered(
-                        peer,
-                        sender,
-                        senderLen,
-                        buildConnectedPong(pingTime, nowMillis())
-                    );
-                    continue;
-                }
-
-                if (payload[0] == ID_CONNECTION_REQUEST) {
-                    std::size_t offset = 1;
-                    const uint64_t clientGuid = readU64BE(payload, offset);
-                    const int64_t requestTimestamp = static_cast<int64_t>(readU64BE(payload, offset));
-                    (void) clientGuid;
-                    sendReliableOrdered(
-                        peer,
-                        sender,
-                        senderLen,
-                        buildConnectionRequestAccepted(senderAddr, requestTimestamp, nowMillis())
-                    );
-                    continue;
-                }
-
-                if (payload[0] == ID_DISCONNECTION_NOTIFICATION ||
-                    payload[0] == ID_CONNECTION_LOST) {
-                    {
-                        std::lock_guard<std::mutex> lock(peersMutex_);
-                        peers_.erase(peerKey(senderAddr));
+                    if (!initialized) {
+                        expected = frame.orderedIndex;
+                        initialized = true;
                     }
-                    if (closeConnectionHandler_) {
-                        closeConnectionHandler_(peer);
+
+                    if (frame.orderedIndex < expected) {
+                        continue;
                     }
-                    continue;
+
+                    if (frame.orderedIndex > expected) {
+                        state.pendingOrderedPayloads[channel].emplace(frame.orderedIndex, std::move(payload));
+                        continue;
+                    }
+
+                    readyPayloads.push_back(std::move(payload));
+                    ++expected;
+
+                    auto& pending = state.pendingOrderedPayloads[channel];
+                    while (true) {
+                        auto it = pending.find(expected);
+                        if (it == pending.end()) {
+                            break;
+                        }
+                        readyPayloads.push_back(std::move(it->second));
+                        pending.erase(it);
+                        ++expected;
+                    }
+                } else {
+                    readyPayloads.push_back(std::move(payload));
                 }
 
-                if (encapsulatedHandler_) {
-                    encapsulatedHandler_(peer, payload);
+                for (const auto& readyPayload : readyPayloads) {
+                    processPayload(readyPayload);
                 }
             }
             return;

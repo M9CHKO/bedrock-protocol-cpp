@@ -14,6 +14,7 @@
 #include <bedrock/world/BedrockChunk.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
@@ -416,10 +417,74 @@ private:
         for (const auto& field : decoder.decodePacket(packet.name, packet.payload)) {
             if (field.path.find('.') == std::string::npos &&
                 field.path.find('[') == std::string::npos) {
-                self->params[field.path] = PacketValue::string(field.value);
+                self->params[field.path] = valueFromDecodedField(field);
             }
         }
         self->decoded_ = true;
+    }
+
+    static PacketValue valueFromDecodedField(const ProtoDefField& field) {
+        if (field.type.rfind("mapper<", 0) == 0) {
+            auto slash = field.value.find('/');
+            if (slash != std::string::npos && slash + 1 < field.value.size()) {
+                return PacketValue::string(field.value.substr(slash + 1));
+            }
+            if (isIntegerText(field.value)) {
+                return PacketValue::uinteger(static_cast<uint64_t>(std::strtoull(field.value.c_str(), nullptr, 10)));
+            }
+            return PacketValue::string(field.value);
+        }
+
+        if (field.type == "bool") {
+            return PacketValue::boolean(field.value == "true" || field.value == "1");
+        }
+
+        if (field.type == "lf32" || field.type == "lf64" ||
+            field.type == "bf32" || field.type == "bf64") {
+            return PacketValue::floating(std::strtod(field.value.c_str(), nullptr));
+        }
+
+        if (isSignedType(field.type) && isIntegerText(field.value)) {
+            return PacketValue::integer(static_cast<int64_t>(std::strtoll(field.value.c_str(), nullptr, 10)));
+        }
+
+        if (isUnsignedType(field.type) && isIntegerText(field.value)) {
+            return PacketValue::uinteger(static_cast<uint64_t>(std::strtoull(field.value.c_str(), nullptr, 10)));
+        }
+
+        return PacketValue::string(field.value);
+    }
+
+    static bool isIntegerText(const std::string& value) {
+        if (value.empty()) {
+            return false;
+        }
+        std::size_t pos = value[0] == '-' ? 1 : 0;
+        if (pos >= value.size()) {
+            return false;
+        }
+        for (; pos < value.size(); ++pos) {
+            if (value[pos] < '0' || value[pos] > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool isSignedType(const std::string& type) {
+        return type == "i8" || type == "i16" || type == "li16" ||
+            type == "i32" || type == "li32" ||
+            type == "i64" || type == "li64" ||
+            type == "zigzag32" || type == "zigzag64" ||
+            type == "varint" || type == "varint64";
+    }
+
+    static bool isUnsignedType(const std::string& type) {
+        return type == "u8" || type == "u16" || type == "lu16" ||
+            type == "u32" || type == "lu32" ||
+            type == "u64" || type == "lu64" ||
+            type == "varuint" || type == "varuint32" ||
+            type == "varuint64" || type == "varint128";
     }
 
     void apply(BedrockRelayPacketEvent& event) {
@@ -435,10 +500,15 @@ private:
             return;
         }
 
-        ProtoDefPacketEncoder encoder(version_);
-        auto payload = encoder.encodePacket(name, PacketValue::object(params));
-        VersionedMcpeCodec codec = VersionedMcpeCodec::forVersion(version_);
-        event.replace(codec.packetCodec().makePacketByName(name, payload));
+        try {
+            ProtoDefPacketEncoder encoder(version_);
+            auto payload = encoder.encodePacket(name, PacketValue::object(params));
+            VersionedMcpeCodec codec = VersionedMcpeCodec::forVersion(version_);
+            event.replace(codec.packetCodec().makePacketByName(name, payload));
+        } catch (const std::exception&) {
+            // Keep the original packet flowing if user-level params cannot be
+            // re-encoded yet. Relay traffic must stay byte-for-byte safe.
+        }
     }
 };
 
@@ -727,7 +797,7 @@ private:
         out.upstream.offline = options.destination.offline || options.offline;
         out.upstream.interactiveAuth = true;
         out.upstream.clientCacheEnabled = false;
-        out.upstream.trackWorld = true;
+        out.upstream.trackWorld = false;
         out.upstream.chunkRadius = 20;
 
         out.enableChunkCaching = false;

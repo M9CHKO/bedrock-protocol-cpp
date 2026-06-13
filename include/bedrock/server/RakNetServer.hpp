@@ -3,7 +3,9 @@
 #include <atomic>
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -96,6 +98,11 @@ private:
         uint32_t reliableIndex = 0;
         uint32_t orderedIndex = 0;
         uint16_t outgoingSplitId = 1;
+        std::deque<uint32_t> receivedDatagramOrder;
+        std::unordered_map<uint32_t, bool> receivedDatagramSequences;
+        std::array<uint32_t, 32> expectedOrderedIndex {};
+        std::array<bool, 32> expectedOrderedIndexInitialized {};
+        std::array<std::map<uint32_t, std::vector<uint8_t>>, 32> pendingOrderedPayloads;
         std::unordered_map<uint16_t, SplitAccumulator> splits;
         std::unordered_map<uint32_t, std::vector<uint8_t>> sentReliableDatagrams;
     };

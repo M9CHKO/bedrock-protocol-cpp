@@ -1,27 +1,8 @@
 #include <bedrock/bedrock.hpp>
 
 #include <chrono>
-#include <ctime>
 #include <iostream>
 #include <thread>
-
-namespace {
-
-std::string localTimeString() {
-    const auto now = std::time(nullptr);
-    std::tm tm {};
-#if defined(_WIN32)
-    localtime_s(&tm, &now);
-#else
-    localtime_r(&now, &tm);
-#endif
-
-    char buffer[32] {};
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
-    return buffer;
-}
-
-} // namespace
 
 int main() {
     std::cout.setf(std::ios::unitbuf);
@@ -58,25 +39,6 @@ int main() {
         std::cout << "[relay] New connection "
                   << player.connection.address << ":"
                   << player.connection.port << "\n";
-
-        player.onClientbound([](bedrock::RelayPacketEvent& packet) {
-            if (packet.name == "disconnect") {
-                packet.set("message", "Intercepted by bedrock-protocol-cpp relay");
-            }
-        });
-
-        player.onServerbound([](bedrock::RelayPacketEvent& packet, bedrock::RelayPacketDestination& des) {
-            if (packet.name == "text") {
-                const auto message = packet.get("message");
-                if (!message.empty()) {
-                    packet.set("message", message + ", on " + localTimeString());
-                }
-            }
-
-            if (packet.name == "command_request" && packet.get("command") == "/test") {
-                des.canceled = true;
-            }
-        });
     });
 
     relay.listen();

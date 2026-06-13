@@ -5897,7 +5897,7 @@
       [
         {
           "name": "runtime_id",
-          "type": "varint"
+          "type": "varint64"
         },
         {
           "name": "position",
@@ -5936,7 +5936,7 @@
         },
         {
           "name": "ridden_runtime_id",
-          "type": "varint"
+          "type": "varint64"
         },
         {
           "name": "teleport",

@@ -23,6 +23,23 @@ def protocol_dir_for(version: str) -> str:
 
 count = 0
 
+def normalize_move_player(schema):
+    if not (
+        isinstance(schema, list) and
+        len(schema) == 2 and
+        schema[0] == "container" and
+        isinstance(schema[1], list)
+    ):
+        return schema
+
+    for field in schema[1]:
+        if not isinstance(field, dict):
+            continue
+        if field.get("name") in ("runtime_id", "ridden_runtime_id"):
+            field["type"] = "varint64"
+
+    return schema
+
 for version_dir in sorted(base.iterdir(), key=lambda p: p.name):
     if not version_dir.is_dir():
         continue
@@ -36,6 +53,8 @@ for version_dir in sorted(base.iterdir(), key=lambda p: p.name):
 
     data = json.loads(protocol_path.read_text())
     types = data.get("types", {})
+    if "packet_move_player" in types:
+        types["packet_move_player"] = normalize_move_player(types["packet_move_player"])
 
     out = out_base / f"{version}.tsv"
 

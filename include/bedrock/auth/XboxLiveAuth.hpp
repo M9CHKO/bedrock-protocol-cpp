@@ -26,6 +26,7 @@ struct XboxLiveAuthOptions {
     std::string xboxClientId;
     std::filesystem::path cacheRoot;
     std::vector<std::filesystem::path> minecraftDataRoots;
+    std::string clientDataJson;
     std::function<void(const XboxDeviceCodeInfo&)> onDeviceCode;
     std::function<void(const std::string&)> onLog;
 };

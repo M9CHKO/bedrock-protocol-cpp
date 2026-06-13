@@ -56,6 +56,7 @@ struct BedrockNetworkClientOptions {
     // Optional prebuilt Login packet, including the packet id. Normal bots do
     // not need this; online/offline login packets are generated in-process.
     std::vector<uint8_t> loginPacket;
+    std::string clientDataJson;
 };
 
 struct BedrockNetworkClientPacketEvent {

@@ -598,6 +598,14 @@ std::string buildClientData(
     const std::string& xuid,
     const std::string& selfSignedUuid
 ) {
+    if (!options.clientDataJson.empty()) {
+        auto payload = options.clientDataJson;
+        setJsonStringValue(payload, "SkinAnimationData", "ServerAddress", options.serverAddress);
+        normalizeClientDataForVersion(payload, options.version);
+        log(options, "clientData source=forwarded");
+        return payload;
+    }
+
     std::string source;
     auto payload = readVersionedSteveClientData(
         options.version,

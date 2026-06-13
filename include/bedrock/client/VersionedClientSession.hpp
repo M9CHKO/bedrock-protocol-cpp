@@ -327,7 +327,7 @@ private:
     void autoRespond(const VersionedGamePacket& packet) {
         if (options_.autoResourcePackResponses) {
             if (packet.name == "resource_packs_info") {
-                writeResourcePackHaveAllPacks();
+                writeResourcePackCompleted();
                 return;
             }
 

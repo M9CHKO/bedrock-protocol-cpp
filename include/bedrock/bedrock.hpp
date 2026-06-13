@@ -18,6 +18,8 @@
 #include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -52,6 +54,7 @@ struct Options {
     bool trackWorld = false;
     int32_t chunkRadius = 20;
     std::vector<uint8_t> loginPacket;
+    std::string clientDataJson;
 
     DebugMode debug = DebugMode::Off;
     bool decodePackets = true;
@@ -202,6 +205,7 @@ private:
         out.trackWorld = options.trackWorld;
         out.chunkRadius = options.chunkRadius;
         out.loginPacket = options.loginPacket;
+        out.clientDataJson = options.clientDataJson;
         return out;
     }
 
@@ -268,6 +272,298 @@ inline Client createClient(Options options = {}) {
 
 inline Client createNetworkClient(Options options = {}) {
     return Client(std::move(options));
+}
+
+struct RelayDestination {
+    std::string host = "127.0.0.1";
+    uint16_t port = 19132;
+    bool offline = false;
+};
+
+struct RelayOptions {
+    std::string version = "latest";
+    std::string host = "0.0.0.0";
+    uint16_t port = 19132;
+    RelayDestination destination;
+
+    std::string username = "RelayBot";
+    std::string profile;
+    bool offline = false;
+    bool interactiveAuth = true;
+    bool enableChunkCaching = false;
+    bool logging = false;
+};
+
+class RelayPacketEvent {
+public:
+    BedrockRelayDirection direction = BedrockRelayDirection::Clientbound;
+    std::string name;
+    PacketObject params;
+    VersionedGamePacket packet;
+    bool canceled = false;
+
+    RelayPacketEvent(
+        std::string version,
+        BedrockRelayPacketEvent& event
+    ) : version_(std::move(version)),
+        direction(event.direction),
+        name(event.packet.name),
+        packet(event.packet) {
+        ProtoDefPacketDecoder decoder(version_);
+        for (const auto& field : decoder.decodePacket(packet.name, packet.payload)) {
+            if (field.path.find('.') == std::string::npos &&
+                field.path.find('[') == std::string::npos) {
+                params[field.path] = PacketValue::string(field.value);
+            }
+        }
+    }
+
+    void cancel() {
+        canceled = true;
+        replacements_.clear();
+    }
+
+    void set(const std::string& key, PacketValue value) {
+        params[key] = std::move(value);
+        mutated_ = true;
+    }
+
+    void set(const std::string& key, const std::string& value) {
+        set(key, PacketValue::string(value));
+    }
+
+    std::string get(const std::string& key) const {
+        auto it = params.find(key);
+        if (it == params.end()) return {};
+        const auto& value = it->second;
+        if (value.kind == PacketValue::Kind::String) return value.stringValue;
+        if (value.kind == PacketValue::Kind::Bool) return value.boolValue ? "true" : "false";
+        if (value.kind == PacketValue::Kind::Int) return std::to_string(value.intValue);
+        if (value.kind == PacketValue::Kind::UInt) return std::to_string(value.uintValue);
+        if (value.kind == PacketValue::Kind::Double) return std::to_string(value.doubleValue);
+        return {};
+    }
+
+    void replace(VersionedGamePacket replacement) {
+        canceled = false;
+        replacements_.clear();
+        replacements_.push_back(std::move(replacement));
+    }
+
+private:
+    friend class Relay;
+    std::string version_;
+    bool mutated_ = false;
+    std::vector<VersionedGamePacket> replacements_;
+
+    void apply(BedrockRelayPacketEvent& event) {
+        if (canceled) {
+            event.cancel();
+            return;
+        }
+        if (!replacements_.empty()) {
+            event.replace(std::move(replacements_));
+            return;
+        }
+        if (!mutated_) {
+            return;
+        }
+
+        ProtoDefPacketEncoder encoder(version_);
+        auto payload = encoder.encodePacket(name, PacketValue::object(params));
+        VersionedMcpeCodec codec = VersionedMcpeCodec::forVersion(version_);
+        event.replace(codec.packetCodec().makePacketByName(name, payload));
+    }
+};
+
+class RelayPlayer {
+public:
+    class Upstream {
+    public:
+        explicit Upstream(BedrockLiveRelay* relay = nullptr) : relay_(relay) {}
+
+        void queue(const std::string& packetName, PacketValue value) {
+            if (!relay_ || !relay_->upstream()) return;
+            relay_->upstream()->queue(packetName, value);
+        }
+
+        void write(const std::string& packetName, PacketValue value) {
+            if (!relay_ || !relay_->upstream()) return;
+            relay_->upstream()->write(packetName, value);
+        }
+
+    private:
+        BedrockLiveRelay* relay_ = nullptr;
+    };
+
+    using PacketHandler = std::function<void(RelayPacketEvent&)>;
+
+    BedrockServerConnection connection;
+    Upstream upstream;
+
+    RelayPlayer() = default;
+    explicit RelayPlayer(BedrockLiveRelay* relay)
+        : upstream(relay),
+          relay_(relay) {}
+
+    void on(const std::string& direction, PacketHandler handler) {
+        if (direction == "clientbound") {
+            clientboundHandlers_.push_back(std::move(handler));
+            return;
+        }
+        if (direction == "serverbound") {
+            serverboundHandlers_.push_back(std::move(handler));
+            return;
+        }
+        throw std::runtime_error("unknown relay player direction: " + direction);
+    }
+
+    void queue(const std::string& packetName, PacketValue value) {
+        if (!relay_) return;
+        relay_->server().send(connection, packetName, value);
+    }
+
+    void write(const std::string& packetName, PacketValue value) {
+        queue(packetName, std::move(value));
+    }
+
+private:
+    friend class Relay;
+    BedrockLiveRelay* relay_ = nullptr;
+    std::vector<PacketHandler> clientboundHandlers_;
+    std::vector<PacketHandler> serverboundHandlers_;
+
+    void dispatch(RelayPacketEvent& event) {
+        auto& handlers = event.direction == BedrockRelayDirection::Clientbound
+            ? clientboundHandlers_
+            : serverboundHandlers_;
+        for (auto& handler : handlers) {
+            handler(event);
+        }
+    }
+};
+
+class Relay {
+public:
+    using ConnectHandler = std::function<void(RelayPlayer&)>;
+    using PacketHandler = std::function<void(RelayPacketEvent&)>;
+
+    explicit Relay(RelayOptions options)
+        : options_(normalizeOptions(std::move(options))),
+          live_(toLiveOptions(options_)),
+          player_(&live_) {}
+
+    void listen() {
+        live_.onConnect([this](const BedrockServerConnection& connection) {
+            player_.connection = connection;
+            for (auto& handler : connectHandlers_) {
+                handler(player_);
+            }
+        });
+
+        live_.on("clientbound", [this](BedrockRelayPacketEvent& event) {
+            RelayPacketEvent wrapped(options_.version, event);
+            player_.dispatch(wrapped);
+            for (auto& handler : clientboundHandlers_) {
+                handler(wrapped);
+            }
+            wrapped.apply(event);
+            if (options_.logging) {
+                std::cout << "* Backend -> Proxy " << wrapped.name << "\n";
+            }
+        });
+
+        live_.on("serverbound", [this](BedrockRelayPacketEvent& event) {
+            RelayPacketEvent wrapped(options_.version, event);
+            player_.dispatch(wrapped);
+            for (auto& handler : serverboundHandlers_) {
+                handler(wrapped);
+            }
+            wrapped.apply(event);
+            if (options_.logging) {
+                std::cout << "* Client -> Proxy " << wrapped.name << "\n";
+            }
+        });
+
+        live_.listen();
+    }
+
+    int run() {
+        listen();
+        return live_.run();
+    }
+
+    void close(const std::string& reason = "closed") {
+        live_.close(reason);
+    }
+
+    void on(const std::string& eventName, ConnectHandler handler) {
+        if (eventName != "connect") {
+            throw std::runtime_error("unknown relay event: " + eventName);
+        }
+        connectHandlers_.push_back(std::move(handler));
+    }
+
+    void on(const std::string& direction, PacketHandler handler) {
+        if (direction == "clientbound") {
+            clientboundHandlers_.push_back(std::move(handler));
+            return;
+        }
+        if (direction == "serverbound") {
+            serverboundHandlers_.push_back(std::move(handler));
+            return;
+        }
+        throw std::runtime_error("unknown relay packet direction: " + direction);
+    }
+
+    BedrockLiveRelay& live() { return live_; }
+    RelayPlayer& player() { return player_; }
+
+private:
+    RelayOptions options_;
+    BedrockLiveRelay live_;
+    RelayPlayer player_;
+    std::vector<ConnectHandler> connectHandlers_;
+    std::vector<PacketHandler> clientboundHandlers_;
+    std::vector<PacketHandler> serverboundHandlers_;
+
+    static RelayOptions normalizeOptions(RelayOptions options) {
+        if (options.version.empty() || options.version == "auto" || options.version == "latest") {
+            auto vs = ProtocolDefinition::versions();
+            if (!vs.empty()) options.version = vs.back();
+        }
+        if (options.profile.empty()) {
+            options.profile = options.username;
+        }
+        return options;
+    }
+
+    static BedrockLiveRelayOptions toLiveOptions(const RelayOptions& options) {
+        BedrockLiveRelayOptions out;
+        out.server.host = options.host;
+        out.server.port = options.port;
+        out.server.version = options.version;
+        out.server.motd = "Bedrock Protocol C++ Relay";
+        out.server.maxPlayers = 3;
+
+        out.upstream.host = options.destination.host;
+        out.upstream.port = options.destination.port;
+        out.upstream.version = options.version;
+        out.upstream.username = options.username;
+        out.upstream.profile = options.profile;
+        out.upstream.offline = options.destination.offline || options.offline;
+        out.upstream.interactiveAuth = options.interactiveAuth;
+        out.upstream.clientCacheEnabled = options.enableChunkCaching;
+        out.upstream.trackWorld = true;
+
+        out.enableChunkCaching = options.enableChunkCaching;
+        out.logging = options.logging;
+        return out;
+    }
+};
+
+inline Relay createRelay(RelayOptions options) {
+    return Relay(std::move(options));
 }
 
 inline api::Client createExternalClient(api::ClientOptions options = {}) {

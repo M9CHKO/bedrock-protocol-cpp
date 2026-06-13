@@ -5,6 +5,7 @@
 #include <bedrock/server/BedrockServer.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -17,6 +18,12 @@
 
 namespace bedrock {
 
+struct BedrockRelayDownstreamProfile {
+    std::string displayName;
+    std::string xuid;
+    std::string identity;
+};
+
 struct BedrockLiveRelayOptions {
     BedrockServerOptions server;
     BedrockNetworkClientOptions upstream;
@@ -24,8 +31,13 @@ struct BedrockLiveRelayOptions {
     bool forwardServerbound = true;
     bool forwardClientbound = true;
     bool skipClientboundLoginSuccess = true;
-    bool skipClientboundResourcePacks = true;
+    bool skipClientboundResourcePacks = false;
+    bool skipClientboundHandshake = true;
+    bool forwardDownstreamClientData = true;
+    bool queueClientboundLevelChunksUntilStartGame = true;
+    bool enableChunkCaching = false;
     bool filterDownstreamHandshakePackets = true;
+    bool logging = false;
     VersionedMcpeCompression clientboundCompression = VersionedMcpeCompression::DeflateRaw;
 };
 
@@ -81,13 +93,19 @@ private:
     std::condition_variable closedCv_;
     std::optional<BedrockServerConnection> downstream_;
     std::vector<VersionedGamePacket> pendingServerbound_;
+    std::vector<VersionedGamePacket> pendingPostSpawnServerbound_;
     std::vector<VersionedGamePacket> pendingClientbound_;
+    std::vector<VersionedGamePacket> heldClientboundLevelChunks_;
+    std::chrono::steady_clock::time_point clientboundChunkReleaseAt_ {};
+    BedrockRelayDownstreamProfile downstreamProfile_;
 
     std::atomic<bool> closed_ {true};
     std::atomic<bool> listening_ {false};
     std::atomic<bool> downstreamJoined_ {false};
     std::atomic<bool> upstreamStarted_ {false};
     std::atomic<bool> upstreamReady_ {false};
+    std::atomic<bool> clientboundStartGameSent_ {false};
+    std::atomic<bool> clientboundPlayerSpawnSeen_ {false};
 
     std::vector<ConnectionHandler> connectHandlers_;
     std::vector<ConnectionHandler> joinHandlers_;
@@ -98,11 +116,14 @@ private:
 
     static BedrockLiveRelayOptions normalizeOptions(BedrockLiveRelayOptions options);
     static bool isDownstreamHandshakePacket(const std::string& name);
+    static bool isClientboundHandshakePacket(const std::string& name);
     static bool isClientboundResourcePackPacket(const std::string& name);
     static bool isPlayStatusLoginSuccess(const VersionedGamePacket& packet);
+    static bool isPlayStatusPlayerSpawn(const std::string& version, const VersionedGamePacket& packet);
 
     void emitError(const std::string& message);
     void emitStatus();
+    void captureDownstreamClientData(const VersionedGamePacket& packet);
     void startUpstream();
     void handleUpstreamPacket(const VersionedGamePacket& packet);
     void handleDownstreamPacket(const BedrockServerPacketEvent& event);

@@ -78,6 +78,17 @@ uint16_t parseU16Field(
     }
 }
 
+int32_t playStatusCode(const VersionedGamePacket& packet) {
+    if (packet.name != "play_status" || packet.payload.size() < 4) {
+        return -1;
+    }
+
+    return static_cast<int32_t>(packet.payload[0]) |
+        (static_cast<int32_t>(packet.payload[1]) << 8) |
+        (static_cast<int32_t>(packet.payload[2]) << 16) |
+        (static_cast<int32_t>(packet.payload[3]) << 24);
+}
+
 } // namespace
 
 BedrockNetworkClient::BedrockNetworkClient(BedrockNetworkClientOptions options)
@@ -428,8 +439,6 @@ void BedrockNetworkClient::handlePacket(const VersionedGamePacket& packet) {
 
     if (packet.name == "server_to_client_handshake") {
         startEncryptionFromServerHandshake(packet);
-        setStatus(BedrockNetworkClientStatus::Initializing);
-        emitJoin();
         return;
     }
 
@@ -444,10 +453,13 @@ void BedrockNetworkClient::handlePacket(const VersionedGamePacket& packet) {
     session_.handlePacket(packet);
 
     if (packet.name == "play_status") {
-        ProtoDefPacketDecoder decoder(options_.version);
-        auto fields = decoder.decodePacket(packet.name, packet.payload);
-        auto status = findFieldValue(fields, "status");
-        if (status == "player_spawn") {
+        const int32_t code = playStatusCode(packet);
+        if (code == 0 &&
+            this->status() == BedrockNetworkClientStatus::Authenticating) {
+            setStatus(BedrockNetworkClientStatus::Initializing);
+            emitJoin();
+        }
+        if (code == 3) {
             setStatus(BedrockNetworkClientStatus::Initialized);
         }
     }
@@ -543,6 +555,7 @@ void BedrockNetworkClient::prepareLoginPacket() {
         .interactiveAuth = options_.interactiveAuth,
         .xboxClientId = options_.xboxClientId,
         .cacheRoot = options_.authCacheRoot,
+        .clientDataJson = options_.clientDataJson,
         .onDeviceCode = [](const XboxDeviceCodeInfo& info) {
             std::cout << "[XBOX] Open: " << info.verificationUri << "\n";
             std::cout << "[XBOX] Code: " << info.userCode << "\n";
@@ -617,12 +630,13 @@ void BedrockNetworkClient::sendPackets(
             throw std::runtime_error("encrypt stream is not initialized");
         }
 
-        // Match tools/session.cpp encrypted path exactly:
-        // full packets -> framed batch -> raw deflate -> AES plaintext/checksum -> stream encrypt.
-        // Do not use choosePlainCompression() here; old versions like 1.20.40 expect this.
+        // Match bedrock-protocol's Framer: encrypted packets are still only
+        // compressed when the framed batch is larger than the negotiated
+        // threshold. Small control packets such as client_cache_status must
+        // remain uncompressed.
         auto compressionPacket = session_.mcpeCodec().encodeCompressionPacket(
             packets,
-            VersionedMcpeCompression::DeflateRaw
+            choosePlainCompression(packets)
         );
 
         auto aesPlaintext = BedrockEncryption::makeAesPlaintext(

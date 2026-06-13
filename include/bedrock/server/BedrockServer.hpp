@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -130,20 +131,47 @@ public:
         const VersionedGamePacket& packet,
         VersionedMcpeCompression compression = VersionedMcpeCompression::Uncompressed
     ) {
+        sendPackets(connection, std::vector<VersionedGamePacket>{packet}, compression);
+    }
+
+    void sendPackets(
+        const BedrockServerConnection& connection,
+        const std::vector<VersionedGamePacket>& packets,
+        VersionedMcpeCompression compression = VersionedMcpeCompression::Uncompressed
+    ) {
+        if (packets.empty()) {
+            return;
+        }
+
+        auto effectiveCompression = compression;
+        if (effectiveCompression == VersionedMcpeCompression::DeflateRaw) {
+            auto framedBatch = mcpeCodec_.batchCodec().encodeFramedBatch(packets);
+            if (framedBatch.size() <= options_.compressionThreshold) {
+                effectiveCompression = VersionedMcpeCompression::Uncompressed;
+            }
+        }
+
         auto& session = sessions_[connectionKey(connection.peer)];
         if (session.encryptionEnabled && session.hasEncryptionKeys) {
-            auto compressionPacket = mcpeCodec_.encodeCompressionPacket({packet}, compression);
-            auto encrypted = BedrockEncryption::encryptMcpePayloadGcm(
+            if (!session.encryptStream) {
+                throw std::runtime_error("server encrypt stream is not initialized");
+            }
+            auto compressionPacket = mcpeCodec_.encodeCompressionPacket(packets, effectiveCompression);
+            auto aesPlaintext = BedrockEncryption::makeAesPlaintext(
                 compressionPacket,
                 session.sendCounter++,
-                session.encryptionKeys.secretKeyBytes,
-                session.encryptionKeys.iv16
+                session.encryptionKeys.secretKeyBytes
             );
+            auto encryptedOnly = session.encryptStream->process(aesPlaintext);
+            std::vector<uint8_t> encrypted;
+            encrypted.reserve(1 + encryptedOnly.size());
+            encrypted.push_back(0xfe);
+            encrypted.insert(encrypted.end(), encryptedOnly.begin(), encryptedOnly.end());
             raknet_.sendReliable(connection.peer, encrypted);
             return;
         }
 
-        auto mcpe = mcpeCodec_.encodeMcpePayload({packet}, compression);
+        auto mcpe = mcpeCodec_.encodeMcpePayload(packets, effectiveCompression);
         raknet_.sendReliable(connection.peer, mcpe);
     }
 
@@ -223,6 +251,8 @@ private:
         std::vector<uint8_t> salt;
         std::string clientPublicKeyDerBase64;
         DerivedKeyResult encryptionKeys;
+        std::unique_ptr<BedrockAesGcmStream> encryptStream;
+        std::unique_ptr<BedrockAesGcmStream> decryptStream;
         bool hasEncryptionKeys = false;
         bool encryptionEnabled = false;
         bool resourcePacksInfoSent = false;
@@ -256,12 +286,36 @@ private:
         auto& session = sessions_[key];
         VersionedMcpePayload decoded;
         if (session.encryptionEnabled && session.hasEncryptionKeys) {
-            auto compressionPacket = BedrockEncryption::decryptMcpePayloadGcm(
-                payload,
-                session.receiveCounter++,
-                session.encryptionKeys.secretKeyBytes,
-                session.encryptionKeys.iv16
+            if (!session.decryptStream) {
+                throw std::runtime_error("server decrypt stream is not initialized");
+            }
+            if (payload.size() < 2 || payload[0] != 0xfe) {
+                throw std::runtime_error("encrypted MCPE payload missing 0xfe header");
+            }
+
+            std::vector<uint8_t> encryptedOnly(payload.begin() + 1, payload.end());
+            auto aesPlaintext = session.decryptStream->process(encryptedOnly);
+            if (aesPlaintext.size() < 8) {
+                throw std::runtime_error("decrypted payload too small for checksum");
+            }
+
+            std::vector<uint8_t> compressionPacket(
+                aesPlaintext.begin(),
+                aesPlaintext.end() - 8
             );
+            std::vector<uint8_t> receivedChecksum(
+                aesPlaintext.end() - 8,
+                aesPlaintext.end()
+            );
+            auto expectedChecksum = BedrockEncryption::computeChecksum(
+                compressionPacket,
+                session.receiveCounter,
+                session.encryptionKeys.secretKeyBytes
+            );
+            if (receivedChecksum != expectedChecksum) {
+                throw std::runtime_error("encrypted payload checksum mismatch");
+            }
+            ++session.receiveCounter;
             decoded = mcpeCodec_.decodeCompressionPacket(compressionPacket);
         } else {
             decoded = mcpeCodec_.decodeMcpePayload(payload);
@@ -292,7 +346,7 @@ private:
         const VersionedGamePacket& packet
     ) {
         if (packet.name == "request_network_settings" && mcpeCodec_.definition().hasPacket("network_settings")) {
-            send(connection, "network_settings", ProtoDefValue::object({
+            sendPreCompression(connection, "network_settings", ProtoDefValue::object({
                 {"compression_threshold", ProtoDefValue::uinteger(options_.compressionThreshold)},
                 {"compression_algorithm", ProtoDefValue::string(options_.compressionAlgorithm)},
                 {"client_throttle", ProtoDefValue::boolean(false)},
@@ -352,6 +406,16 @@ private:
             session.serverKeys.privateKeyPem,
             session.salt
         );
+        session.encryptStream = std::make_unique<BedrockAesGcmStream>(
+            session.encryptionKeys.secretKeyBytes,
+            session.encryptionKeys.iv16,
+            BedrockAesGcmStream::Mode::Encrypt
+        );
+        session.decryptStream = std::make_unique<BedrockAesGcmStream>(
+            session.encryptionKeys.secretKeyBytes,
+            session.encryptionKeys.iv16,
+            BedrockAesGcmStream::Mode::Decrypt
+        );
         session.hasEncryptionKeys = true;
 
         const std::string payloadJson =
@@ -373,6 +437,23 @@ private:
         session.receiveCounter = 0;
     }
 
+    void sendPreCompression(
+        const BedrockServerConnection& connection,
+        const std::string& packetName,
+        const ProtoDefValue& value
+    ) {
+        ProtoDefPacketEncoder encoder(options_.version);
+        auto payload = encoder.encodePacket(packetName, value);
+        auto packet = mcpeCodec_.packetCodec().makePacketByName(packetName, payload);
+        auto framed = mcpeCodec_.batchCodec().encodeFramedBatch({packet});
+
+        std::vector<uint8_t> mcpe;
+        mcpe.reserve(1 + framed.size());
+        mcpe.push_back(0xfe);
+        mcpe.insert(mcpe.end(), framed.begin(), framed.end());
+        raknet_.sendReliable(connection.peer, mcpe);
+    }
+
     void handleResourcePackClientResponse(
         const BedrockServerConnection& connection,
         const VersionedGamePacket& packet
@@ -381,6 +462,12 @@ private:
         const uint8_t status = packet.payload.empty() ? 0xff : packet.payload[0];
 
         if (status == 0x03 && !session.resourcePackStackSent) {
+            sendEmptyResourcePackStack(connection);
+            session.resourcePackStackSent = true;
+            return;
+        }
+
+        if (status == 0x04 && !session.resourcePackStackSent) {
             sendEmptyResourcePackStack(connection);
             session.resourcePackStackSent = true;
             return;

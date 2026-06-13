@@ -479,9 +479,6 @@ public:
                 handler(wrapped);
             }
             wrapped.apply(event);
-            if (options_.logging) {
-                std::cout << "* Backend -> Proxy " << wrapped.name << "\n";
-            }
         });
 
         live_.on("serverbound", [this](BedrockRelayPacketEvent& event) {
@@ -491,9 +488,6 @@ public:
                 handler(wrapped);
             }
             wrapped.apply(event);
-            if (options_.logging) {
-                std::cout << "* Client -> Proxy " << wrapped.name << "\n";
-            }
         });
 
         live_.listen();

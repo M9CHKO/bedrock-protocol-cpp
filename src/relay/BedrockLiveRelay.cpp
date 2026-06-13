@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -144,6 +145,113 @@ bool fieldIsTrue(const std::vector<ProtoDefField>& fields, const std::string& pa
     return value == "true" || value == "1";
 }
 
+std::string packetFingerprint(const VersionedGamePacket& packet);
+
+float readF32LE(const std::vector<uint8_t>& bytes, std::size_t offset) {
+    if (offset + 4 > bytes.size()) {
+        return 0.0f;
+    }
+    uint32_t raw =
+        static_cast<uint32_t>(bytes[offset]) |
+        (static_cast<uint32_t>(bytes[offset + 1]) << 8u) |
+        (static_cast<uint32_t>(bytes[offset + 2]) << 16u) |
+        (static_cast<uint32_t>(bytes[offset + 3]) << 24u);
+    float value = 0.0f;
+    static_assert(sizeof(value) == sizeof(raw), "float size mismatch");
+    std::memcpy(&value, &raw, sizeof(value));
+    return value;
+}
+
+unsigned __int128 readVarUInt128Loose(const std::vector<uint8_t>& bytes, std::size_t& offset) {
+    unsigned __int128 value = 0;
+    int shift = 0;
+    while (offset < bytes.size() && shift < 128) {
+        const auto byte = bytes[offset++];
+        value |= static_cast<unsigned __int128>(byte & 0x7f) << shift;
+        if ((byte & 0x80) == 0) {
+            return value;
+        }
+        shift += 7;
+    }
+    return value;
+}
+
+bool hasFlag128(unsigned __int128 flags, int bit) {
+    return (flags & (static_cast<unsigned __int128>(1) << bit)) != 0;
+}
+
+std::string playerAuthInputSummary(const VersionedGamePacket& packet) {
+    if (packet.payload.size() < 33) {
+        return packetFingerprint(packet);
+    }
+
+    // packet_player_auth_input starts with:
+    // pitch, yaw, position(vec3f), move_vector(vec2f), head_yaw, input_data.
+    std::size_t offset = 0;
+    const auto pitch = readF32LE(packet.payload, offset); offset += 4;
+    const auto yaw = readF32LE(packet.payload, offset); offset += 4;
+    const auto x = readF32LE(packet.payload, offset); offset += 4;
+    const auto y = readF32LE(packet.payload, offset); offset += 4;
+    const auto z = readF32LE(packet.payload, offset); offset += 4;
+    offset += 8; // move_vector
+    const auto headYaw = readF32LE(packet.payload, offset); offset += 4;
+    const auto inputFlags = readVarUInt128Loose(packet.payload, offset);
+
+    struct FlagName {
+        int bit;
+        const char* name;
+    };
+    static constexpr FlagName flags[] = {
+        {32, "start_gliding"},
+        {33, "stop_gliding"},
+        {34, "item_interact"},
+        {35, "block_action"},
+        {36, "item_stack_request"},
+        {39, "missed_swing"},
+        {54, "start_using_item"},
+        {55, "camera_relative_movement_enabled"},
+        {58, "start_spin_attack"},
+        {59, "stop_spin_attack"}
+    };
+
+    std::ostringstream out;
+    out << packetFingerprint(packet)
+        << " pos=(" << x << "," << y << "," << z << ")"
+        << " pitch=" << pitch
+        << " yaw=" << yaw
+        << " head_yaw=" << headYaw
+        << " input_bytes=" << offset
+        << " flags=[";
+    bool any = false;
+    for (const auto& flag : flags) {
+        if (!hasFlag128(inputFlags, flag.bit)) {
+            continue;
+        }
+        if (any) out << ",";
+        out << flag.name;
+        any = true;
+    }
+    out << "]";
+    return out.str();
+}
+
+uint64_t fnv1a64(const std::vector<uint8_t>& bytes) {
+    uint64_t hash = 14695981039346656037ull;
+    for (const auto byte : bytes) {
+        hash ^= static_cast<uint64_t>(byte);
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+std::string packetFingerprint(const VersionedGamePacket& packet) {
+    std::ostringstream out;
+    out << " full=" << packet.fullPacket.size()
+        << " payload=" << packet.payload.size()
+        << " hash=0x" << std::hex << fnv1a64(packet.fullPacket) << std::dec;
+    return out.str();
+}
+
 std::string packetSummary(const std::string& version, const VersionedGamePacket& packet) {
     try {
         if (packet.name == "level_chunk") {
@@ -187,34 +295,8 @@ std::string packetSummary(const std::string& version, const VersionedGamePacket&
                 return {};
             }
 
-            ProtoDefPacketDecoder decoder(version);
-            const auto fields = decoder.decodePacket(packet.name, packet.payload);
-            std::ostringstream out;
-            out << " pos=(" << findFieldValue(fields, "position.x")
-                << "," << findFieldValue(fields, "position.y")
-                << "," << findFieldValue(fields, "position.z") << ")"
-                << " tick=" << findFieldValue(fields, "tick");
-
-            const char* flags[] = {
-                "input_data.start_gliding",
-                "input_data.stop_gliding",
-                "input_data.start_flying",
-                "input_data.stop_flying",
-                "input_data.item_interact",
-                "input_data.item_stack_request",
-                "input_data.block_action"
-            };
-            bool any = false;
-            out << " flags=[";
-            for (const auto* flag : flags) {
-                if (!fieldIsTrue(fields, flag)) continue;
-                if (any) out << ",";
-                const std::string flagName(flag);
-                out << flagName.substr(flagName.find_last_of('.') + 1);
-                any = true;
-            }
-            out << "]";
-            return out.str();
+            (void)version;
+            return playerAuthInputSummary(packet);
         }
 
         if (packet.name == "item_stack_request" ||
@@ -223,13 +305,11 @@ std::string packetSummary(const std::string& version, const VersionedGamePacket&
             packet.name == "animate" ||
             packet.name == "mob_equipment" ||
             packet.name == "player_action") {
-            std::ostringstream out;
-            out << " bytes=" << packet.payload.size();
-            return out.str();
+            return packetFingerprint(packet);
         }
     } catch (const std::exception& e) {
         return std::string(" decode_error=") + e.what() +
-            " bytes=" + std::to_string(packet.payload.size());
+            packetFingerprint(packet);
     }
 
     return {};
@@ -582,6 +662,11 @@ void BedrockLiveRelay::startUpstream() {
 }
 
 void BedrockLiveRelay::handleUpstreamPacket(const VersionedGamePacket& packet) {
+    if (options_.logging) {
+        std::cout << "* Backend -> Proxy " << packet.name
+                  << packetSummary(options_.server.version, packet) << "\n";
+    }
+
     if (options_.skipClientboundHandshake &&
         isClientboundHandshakePacket(packet.name)) {
         return;
@@ -622,6 +707,11 @@ void BedrockLiveRelay::handleUpstreamPacket(const VersionedGamePacket& packet) {
 }
 
 void BedrockLiveRelay::handleDownstreamPacket(const BedrockServerPacketEvent& event) {
+    if (options_.logging) {
+        std::cout << "* Client -> Proxy " << event.packet.name
+                  << packetSummary(options_.upstream.version, event.packet) << "\n";
+    }
+
     if (event.packet.name == "login") {
         captureDownstreamClientData(event.packet);
         startUpstream();

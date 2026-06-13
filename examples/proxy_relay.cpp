@@ -28,14 +28,6 @@ int main() {
         std::cout << "New connection "
                   << player.connection.address << ":"
                   << player.connection.port << "\n";
-
-        player.on("clientbound", [](bedrock::RelayPacketEvent& event) {
-            (void)event;
-        });
-
-        player.on("serverbound", [](bedrock::RelayPacketEvent& event) {
-            (void)event;
-        });
     });
 
     relay.listen();

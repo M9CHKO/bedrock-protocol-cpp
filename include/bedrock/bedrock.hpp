@@ -308,15 +308,7 @@ public:
     ) : version_(std::move(version)),
         direction(event.direction),
         name(event.packet.name),
-        packet(event.packet) {
-        ProtoDefPacketDecoder decoder(version_);
-        for (const auto& field : decoder.decodePacket(packet.name, packet.payload)) {
-            if (field.path.find('.') == std::string::npos &&
-                field.path.find('[') == std::string::npos) {
-                params[field.path] = PacketValue::string(field.value);
-            }
-        }
-    }
+        packet(event.packet) {}
 
     void cancel() {
         canceled = true;
@@ -324,6 +316,7 @@ public:
     }
 
     void set(const std::string& key, PacketValue value) {
+        ensureDecoded();
         params[key] = std::move(value);
         mutated_ = true;
     }
@@ -333,6 +326,7 @@ public:
     }
 
     std::string get(const std::string& key) const {
+        ensureDecoded();
         auto it = params.find(key);
         if (it == params.end()) return {};
         const auto& value = it->second;
@@ -353,8 +347,25 @@ public:
 private:
     friend class Relay;
     std::string version_;
+    mutable bool decoded_ = false;
     bool mutated_ = false;
     std::vector<VersionedGamePacket> replacements_;
+
+    void ensureDecoded() const {
+        if (decoded_) {
+            return;
+        }
+
+        auto* self = const_cast<RelayPacketEvent*>(this);
+        ProtoDefPacketDecoder decoder(version_);
+        for (const auto& field : decoder.decodePacket(packet.name, packet.payload)) {
+            if (field.path.find('.') == std::string::npos &&
+                field.path.find('[') == std::string::npos) {
+                self->params[field.path] = PacketValue::string(field.value);
+            }
+        }
+        self->decoded_ = true;
+    }
 
     void apply(BedrockRelayPacketEvent& event) {
         if (canceled) {

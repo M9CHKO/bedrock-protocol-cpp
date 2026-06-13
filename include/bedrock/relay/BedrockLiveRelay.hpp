@@ -68,6 +68,7 @@ public:
 
     void onConnect(ConnectionHandler handler);
     void onJoin(ConnectionHandler handler);
+    void onDisconnect(ConnectionHandler handler);
     void onClientbound(PacketHandler handler);
     void onServerbound(PacketHandler handler);
     void on(const std::string& direction, PacketHandler handler);
@@ -109,6 +110,7 @@ private:
 
     std::vector<ConnectionHandler> connectHandlers_;
     std::vector<ConnectionHandler> joinHandlers_;
+    std::vector<ConnectionHandler> disconnectHandlers_;
     std::vector<PacketHandler> clientboundHandlers_;
     std::vector<PacketHandler> serverboundHandlers_;
     std::vector<ErrorHandler> errorHandlers_;
@@ -124,6 +126,7 @@ private:
     void emitError(const std::string& message);
     void emitStatus();
     void captureDownstreamClientData(const VersionedGamePacket& packet);
+    void resetRelaySession(const std::string& reason);
     void startUpstream();
     void handleUpstreamPacket(const VersionedGamePacket& packet);
     void handleDownstreamPacket(const BedrockServerPacketEvent& event);

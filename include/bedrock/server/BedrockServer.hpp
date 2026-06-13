@@ -66,6 +66,10 @@ public:
         joinHandlers_.push_back(std::move(handler));
     }
 
+    void onDisconnect(ConnectionHandler handler) {
+        disconnectHandlers_.push_back(std::move(handler));
+    }
+
     void onAny(PacketHandler handler) {
         anyPacketHandlers_.push_back(std::move(handler));
     }
@@ -91,6 +95,9 @@ public:
         });
         raknet_.onEncapsulated([this](const RakNetServerPeer& peer, const std::vector<uint8_t>& payload) {
             handleEncapsulated(peer, payload);
+        });
+        raknet_.onCloseConnection([this](const RakNetServerPeer& peer) {
+            handlePeerClosed(peer);
         });
         raknet_.listen();
     }
@@ -198,6 +205,7 @@ private:
     VersionedMcpeCodec mcpeCodec_;
     std::vector<ConnectionHandler> connectHandlers_;
     std::vector<ConnectionHandler> joinHandlers_;
+    std::vector<ConnectionHandler> disconnectHandlers_;
     std::vector<PacketHandler> anyPacketHandlers_;
     std::unordered_map<std::string, std::vector<PacketHandler>> packetHandlers_;
     std::unordered_map<std::string, BedrockServerConnection> connections_;
@@ -337,7 +345,34 @@ private:
                 }
             }
 
+            if (packet.name == "disconnect") {
+                handlePeerClosed(connection.peer);
+                return;
+            }
+
             handleBuiltInPacket(connection, packet);
+        }
+    }
+
+    void handlePeerClosed(const RakNetServerPeer& peer) {
+        BedrockServerConnection connection;
+        const auto key = connectionKey(peer);
+        auto it = connections_.find(key);
+        if (it != connections_.end()) {
+            connection = it->second;
+        } else {
+            connection.address = peer.address;
+            connection.port = peer.port;
+            connection.clientGuid = peer.clientGuid;
+            connection.mtu = peer.mtu;
+            connection.peer = peer;
+        }
+
+        connections_.erase(key);
+        sessions_.erase(key);
+
+        for (auto& handler : disconnectHandlers_) {
+            handler(connection);
         }
     }
 

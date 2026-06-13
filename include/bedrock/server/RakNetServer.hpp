@@ -31,6 +31,7 @@ struct RakNetServerPeer {
 class RakNetServer {
 public:
     using OpenConnectionHandler = std::function<void(const RakNetServerPeer&)>;
+    using CloseConnectionHandler = std::function<void(const RakNetServerPeer&)>;
     using RawPacketHandler = std::function<void(const RakNetServerPeer&, const std::vector<uint8_t>&)>;
     using EncapsulatedHandler = std::function<void(const RakNetServerPeer&, const std::vector<uint8_t>&)>;
 
@@ -64,6 +65,10 @@ public:
 
     void onOpenConnection(OpenConnectionHandler handler) {
         openConnectionHandler_ = std::move(handler);
+    }
+
+    void onCloseConnection(CloseConnectionHandler handler) {
+        closeConnectionHandler_ = std::move(handler);
     }
 
     void onRawPacket(RawPacketHandler handler) {
@@ -101,6 +106,7 @@ private:
     std::atomic<bool> running_ { false };
     std::thread thread_;
     OpenConnectionHandler openConnectionHandler_;
+    CloseConnectionHandler closeConnectionHandler_;
     RawPacketHandler rawPacketHandler_;
     EncapsulatedHandler encapsulatedHandler_;
     std::mutex peersMutex_;

@@ -11,13 +11,50 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 namespace bedrock {
 
 namespace {
+
+std::mutex& relayLogMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+void relayLogLine(const std::string& line) {
+    std::lock_guard<std::mutex> lock(relayLogMutex());
+    std::cout << line << "\n";
+}
+
+bool shouldLogRelayPacket(const std::string& direction, const std::string& name) {
+    if (name == "player_auth_input" ||
+        name == "move_entity" ||
+        name == "move_player" ||
+        name == "move_entity_delta" ||
+        name == "level_chunk" ||
+        name == "subchunk" ||
+        name == "block_entity_data" ||
+        name == "add_entity" ||
+        name == "add_item_entity" ||
+        name == "player_list" ||
+        name == "update_block" ||
+        name == "level_event" ||
+        name == "text") {
+        static std::mutex countersMutex;
+        static std::unordered_map<std::string, uint64_t> counters;
+        std::lock_guard<std::mutex> lock(countersMutex);
+        auto& count = counters[direction + ":" + name];
+        ++count;
+        return count == 1 || (count % 40) == 0;
+    }
+
+    return true;
+}
 
 std::vector<std::string> jsonStringArrayField(const std::string& json, const std::string& key) {
     std::vector<std::string> out;
@@ -361,6 +398,14 @@ void BedrockLiveRelay::listen() {
         emitStatus();
     });
 
+    server_->onDisconnect([this](const BedrockServerConnection& connection) {
+        for (auto& handler : disconnectHandlers_) {
+            handler(connection);
+        }
+        resetRelaySession("downstream disconnected");
+        emitStatus();
+    });
+
     server_->onAny([this](const BedrockServerPacketEvent& event) {
         handleDownstreamPacket(event);
     });
@@ -408,6 +453,10 @@ void BedrockLiveRelay::onConnect(ConnectionHandler handler) {
 
 void BedrockLiveRelay::onJoin(ConnectionHandler handler) {
     joinHandlers_.push_back(std::move(handler));
+}
+
+void BedrockLiveRelay::onDisconnect(ConnectionHandler handler) {
+    disconnectHandlers_.push_back(std::move(handler));
 }
 
 void BedrockLiveRelay::onClientbound(PacketHandler handler) {
@@ -598,13 +647,46 @@ void BedrockLiveRelay::captureDownstreamClientData(const VersionedGamePacket& pa
         }
 
         if (options_.logging) {
-            std::cout << "[relay] downstream profile"
-                      << " name=" << downstreamProfile_.displayName
-                      << " xuid=" << downstreamProfile_.xuid
-                      << "\n";
+            std::ostringstream out;
+            out << "[relay] downstream profile"
+                << " name=" << downstreamProfile_.displayName
+                << " xuid=" << downstreamProfile_.xuid;
+            relayLogLine(out.str());
         }
     } catch (const std::exception& e) {
         emitError("[relay] failed to forward downstream clientData: " + std::string(e.what()));
+    }
+}
+
+void BedrockLiveRelay::resetRelaySession(const std::string& reason) {
+    if (upstream_) {
+        upstream_->close(reason);
+    }
+    if (upstreamThread_.joinable() &&
+        upstreamThread_.get_id() != std::this_thread::get_id()) {
+        upstreamThread_.join();
+    }
+    upstream_.reset();
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        downstream_.reset();
+        pendingServerbound_.clear();
+        pendingPostSpawnServerbound_.clear();
+        pendingClientbound_.clear();
+        heldClientboundLevelChunks_.clear();
+        clientboundChunkReleaseAt_ = {};
+        downstreamProfile_ = {};
+    }
+
+    downstreamJoined_.store(false);
+    upstreamStarted_.store(false);
+    upstreamReady_.store(false);
+    clientboundStartGameSent_.store(false);
+    clientboundPlayerSpawnSeen_.store(false);
+
+    if (options_.logging) {
+        relayLogLine("[relay] session reset: " + reason);
     }
 }
 
@@ -662,9 +744,11 @@ void BedrockLiveRelay::startUpstream() {
 }
 
 void BedrockLiveRelay::handleUpstreamPacket(const VersionedGamePacket& packet) {
-    if (options_.logging) {
-        std::cout << "* Backend -> Proxy " << packet.name
-                  << packetSummary(options_.server.version, packet) << "\n";
+    if (options_.logging && shouldLogRelayPacket("Backend -> Proxy", packet.name)) {
+        std::ostringstream out;
+        out << "* Backend -> Proxy " << packet.name
+            << packetSummary(options_.server.version, packet);
+        relayLogLine(out.str());
     }
 
     if (options_.skipClientboundHandshake &&
@@ -707,12 +791,17 @@ void BedrockLiveRelay::handleUpstreamPacket(const VersionedGamePacket& packet) {
 }
 
 void BedrockLiveRelay::handleDownstreamPacket(const BedrockServerPacketEvent& event) {
-    if (options_.logging) {
-        std::cout << "* Client -> Proxy " << event.packet.name
-                  << packetSummary(options_.upstream.version, event.packet) << "\n";
+    if (options_.logging && shouldLogRelayPacket("Client -> Proxy", event.packet.name)) {
+        std::ostringstream out;
+        out << "* Client -> Proxy " << event.packet.name
+            << packetSummary(options_.upstream.version, event.packet);
+        relayLogLine(out.str());
     }
 
     if (event.packet.name == "login") {
+        if (upstreamStarted_.load() || upstream_ || downstreamJoined_.load()) {
+            resetRelaySession("downstream reconnect");
+        }
         captureDownstreamClientData(event.packet);
         startUpstream();
     }
@@ -752,6 +841,17 @@ void BedrockLiveRelay::handleDownstreamPacket(const BedrockServerPacketEvent& ev
             !clientboundPlayerSpawnSeen_.load()) {
             std::lock_guard<std::mutex> lock(mutex_);
             pendingPostSpawnServerbound_.push_back(candidate);
+            continue;
+        }
+
+        if (candidate.name == "resource_pack_client_response" && upstream_) {
+            if (options_.logging) {
+                std::ostringstream out;
+                out << "* Proxy -> Backend " << candidate.name
+                    << packetFingerprint(candidate);
+                relayLogLine(out.str());
+            }
+            upstream_->sendPacket(candidate);
             continue;
         }
 
@@ -795,15 +895,19 @@ void BedrockLiveRelay::forwardClientbound(const VersionedGamePacket& packet) {
             heldClientboundLevelChunks_.clear();
         }
     }
-    if (options_.logging) {
-        std::cout << "* Proxy -> Client " << packet.name
-                  << packetSummary(options_.server.version, packet) << "\n";
+    if (options_.logging && shouldLogRelayPacket("Proxy -> Client", packet.name)) {
+        std::ostringstream out;
+        out << "* Proxy -> Client " << packet.name
+            << packetSummary(options_.server.version, packet);
+        relayLogLine(out.str());
     }
     server_->sendPacket(*downstream, packet, options_.clientboundCompression);
 
     if (!heldChunks.empty()) {
         if (options_.logging) {
-            std::cout << "* Proxy -> Client batch level_chunk x" << heldChunks.size() << "\n";
+            std::ostringstream out;
+            out << "* Proxy -> Client batch level_chunk x" << heldChunks.size();
+            relayLogLine(out.str());
         }
         server_->sendPackets(*downstream, heldChunks, options_.clientboundCompression);
     }
@@ -815,9 +919,11 @@ void BedrockLiveRelay::forwardServerbound(const VersionedGamePacket& packet) {
         pendingServerbound_.push_back(packet);
         return;
     }
-    if (options_.logging) {
-        std::cout << "* Proxy -> Backend " << packet.name
-                  << packetSummary(options_.upstream.version, packet) << "\n";
+    if (options_.logging && shouldLogRelayPacket("Proxy -> Backend", packet.name)) {
+        std::ostringstream out;
+        out << "* Proxy -> Backend " << packet.name
+            << packetSummary(options_.upstream.version, packet);
+        relayLogLine(out.str());
     }
     upstream_->sendPacket(packet);
 }

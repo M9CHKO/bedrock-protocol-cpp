@@ -121,7 +121,7 @@ if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
     add_executable(relay-test-server examples/relay_test_server.cpp)
     target_link_libraries(relay-test-server PRIVATE BedrockProtocol::bedrock_protocol)
 
-    add_executable(proxy-relay examples/proxy_relay.cpp)
+    add_executable(proxy-relay relay/proxy_relay.cpp)
     target_link_libraries(proxy-relay PRIVATE BedrockProtocol::bedrock_protocol)
 
     add_executable(simple-server examples/simple_server.cpp)
@@ -147,7 +147,7 @@ if(BEDROCK_PROTOCOL_CPP_INSTALL)
     endif()
 
     if(BEDROCK_PROTOCOL_CPP_BUILD_EXAMPLES)
-        install(TARGETS simple-create-client-bot packet-event-bot medium-bot relay-packet-bot relay-test-server simple-server
+        install(TARGETS simple-create-client-bot packet-event-bot medium-bot relay-packet-bot relay-test-server proxy-relay simple-server
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

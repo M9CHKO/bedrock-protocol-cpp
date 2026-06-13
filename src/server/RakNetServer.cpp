@@ -10,9 +10,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <iostream>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace bedrock {
 
@@ -27,6 +30,8 @@ constexpr uint8_t ID_CONNECTED_PING = 0x00;
 constexpr uint8_t ID_CONNECTED_PONG = 0x03;
 constexpr uint8_t ID_CONNECTION_REQUEST = 0x09;
 constexpr uint8_t ID_CONNECTION_REQUEST_ACCEPTED = 0x10;
+constexpr uint8_t ID_DISCONNECTION_NOTIFICATION = 0x15;
+constexpr uint8_t ID_CONNECTION_LOST = 0x16;
 constexpr uint8_t ID_UNCONNECTED_PONG = 0x1c;
 constexpr uint8_t ID_NACK = 0xa0;
 constexpr uint8_t ID_ACK = 0xc0;
@@ -383,6 +388,26 @@ std::vector<uint32_t> readAckSequences(const std::vector<uint8_t>& data) {
     return sequences;
 }
 
+bool shouldLogDroppedPacket(
+    const sockaddr_in& sender,
+    uint8_t packetId,
+    const std::string& error
+) {
+    static std::mutex mutex;
+    static std::unordered_map<std::string, uint64_t> counters;
+
+    std::ostringstream key;
+    key << sockaddrToIp(sender) << ":"
+        << sockaddrToPort(sender) << ":"
+        << static_cast<int>(packetId) << ":"
+        << error;
+
+    std::lock_guard<std::mutex> lock(mutex);
+    auto& count = counters[key.str()];
+    ++count;
+    return count == 1 || (count % 40) == 0;
+}
+
 } // namespace
 
 RakNetServer::RakNetServer(RakNetServerOptions options)
@@ -412,6 +437,7 @@ RakNetServer& RakNetServer::operator=(RakNetServer&& other) noexcept {
     boundPort_ = other.boundPort_;
     running_.store(other.running_.load());
     openConnectionHandler_ = std::move(other.openConnectionHandler_);
+    closeConnectionHandler_ = std::move(other.closeConnectionHandler_);
     rawPacketHandler_ = std::move(other.rawPacketHandler_);
     if (other.thread_.joinable()) {
         thread_ = std::move(other.thread_);
@@ -742,6 +768,18 @@ void RakNetServer::handlePacket(
                     continue;
                 }
 
+                if (payload[0] == ID_DISCONNECTION_NOTIFICATION ||
+                    payload[0] == ID_CONNECTION_LOST) {
+                    {
+                        std::lock_guard<std::mutex> lock(peersMutex_);
+                        peers_.erase(peerKey(senderAddr));
+                    }
+                    if (closeConnectionHandler_) {
+                        closeConnectionHandler_(peer);
+                    }
+                    continue;
+                }
+
                 if (encapsulatedHandler_) {
                     encapsulatedHandler_(peer, payload);
                 }
@@ -755,7 +793,23 @@ void RakNetServer::handlePacket(
             peer.port = sockaddrToPort(senderAddr);
             rawPacketHandler_(peer, packet);
         }
+    } catch (const std::exception& e) {
+        if (shouldLogDroppedPacket(senderAddr, packetId, e.what())) {
+            std::cerr << "[raknet-server] dropped packet from "
+                      << sockaddrToIp(senderAddr) << ":"
+                      << sockaddrToPort(senderAddr)
+                      << " id=0x" << std::hex << static_cast<int>(packetId)
+                      << std::dec << " error=" << e.what() << "\n";
+        }
+        return;
     } catch (...) {
+        if (shouldLogDroppedPacket(senderAddr, packetId, "unknown")) {
+            std::cerr << "[raknet-server] dropped packet from "
+                      << sockaddrToIp(senderAddr) << ":"
+                      << sockaddrToPort(senderAddr)
+                      << " id=0x" << std::hex << static_cast<int>(packetId)
+                      << std::dec << " error=unknown\n";
+        }
         return;
     }
 }
